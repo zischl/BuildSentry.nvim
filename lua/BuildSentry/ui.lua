@@ -31,7 +31,7 @@ local function set_keymap()
 	end, opts)
 
 	vim.keymap.set("n", "r", function()
-		print("Restarting Task (Not implemented yet)")
+		print("Restarting Task... Not implemented yet")
 	end, opts)
 end
 

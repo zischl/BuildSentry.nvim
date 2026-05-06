@@ -1,8 +1,10 @@
 local M = {}
 
-function M.get_adapter(BuildSentry)
+function M.get_adapter()
 	return {
+		name = "buildsentry",
 		run = function(cmd, env_script, env, args, cwd, opts, on_exit, on_output)
+			local BuildSentry = require("BuildSentry")
 			local name = opts.title or (args and args[1]) or "CMake Task"
 			local full_cmd = cmd .. " " .. table.concat(args, " ")
 
@@ -15,7 +17,7 @@ function M.get_adapter(BuildSentry)
 		end,
 
 		show = function(opts)
-			BuildSentry.open()
+			require("BuildSentry").open()
 		end,
 		close = function(opts) end,
 		stop = function(opts) end,
@@ -28,17 +30,26 @@ function M.get_adapter(BuildSentry)
 	}
 end
 
-function M.attach(BuildSentry)
+function M.attach()
 	local ok_exec, executors = pcall(require, "cmake-tools.executors")
 	local ok_run, runners = pcall(require, "cmake-tools.runners")
 
-	local adapter = M.get_adapter(BuildSentry)
-
-	if ok_exec then
-		executors.buildsentry = adapter
+	if not (ok_exec and ok_run) then
+		return
 	end
-	if ok_run then
-		runners.buildsentry = adapter
+
+	local adapter = M.get_adapter()
+	executors.buildsentry = adapter
+	runners.buildsentry = adapter
+
+	local ok_const, const = pcall(require, "cmake-tools.const")
+	if ok_const then
+		if const.cmake_executor and const.cmake_executor.default_opts then
+			const.cmake_executor.default_opts.buildsentry = {}
+		end
+		if const.cmake_runner and const.cmake_runner.default_opts then
+			const.cmake_runner.default_opts.buildsentry = {}
+		end
 	end
 end
 
