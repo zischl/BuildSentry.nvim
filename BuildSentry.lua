@@ -1,6 +1,7 @@
 local BuildSentry = {}
 BuildSentry.state = {}
 BuildSentry.tasks = {}
+BuildSentry.cmake_tools_adapter = {}
 
 local function set_keymap()
 	local task_buf = BuildSentry.state.task_buf
@@ -125,6 +126,52 @@ function BuildSentry.exec(name, cmd, cwd)
 
 	table.insert(BuildSentry.tasks, task)
 	return task
+end
+
+BuildSentry.cmake_tools_adapter = {
+	run = function(cmd, env_script, env, args, cwd, opts, on_exit, on_output)
+		local name = opts.title or (args and args[1]) or "CMake Task"
+		local full_cmd = cmd .. " " .. table.concat(args, " ")
+
+		if BuildSentry then
+			BuildSentry.exec(name, full_cmd, cwd)
+			BuildSentry.open()
+		end
+
+		if on_exit then
+			on_exit(0)
+		end
+	end,
+
+	show = function(opts)
+		if BuildSentry then
+			BuildSentry.open()
+		end
+	end,
+	close = function(opts) end,
+	stop = function(opts) end,
+	has_active_job = function(opts)
+		return false
+	end,
+	is_installed = function()
+		return true
+	end,
+}
+
+function BuildSentry.cmake_tools_attach()
+	local ok_exec, executors = pcall(require, "cmake-tools.executors")
+	local ok_run, runners = pcall(require, "cmake-tools.runners")
+
+	if ok_exec then
+		executors.buildsentry = BuildSentry.cmake_tools_adapter
+	end
+	if ok_run then
+		runners.buildsentry = BuildSentry.cmake_tools_adapter
+	end
+end
+
+function BuildSentry.setup(opts)
+	BuildSentry.cmake_tools_attach()
 end
 
 return BuildSentry
