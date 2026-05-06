@@ -1,32 +1,26 @@
 local M = {}
-local executor = require("BuildSentry.executor")
-
-M.state = {
-	task_window = nil,
-	output_window = nil,
-	task_buf = nil,
-	output_buf = nil,
-	guide_win = nil,
-}
+local state = require("BuildSentry.state")
 
 local function set_keymap()
-	local task_buf = M.state.task_buf
+	local task_buf = state.buffers.task
 	local opts = { buffer = task_buf, silent = true }
 
 	vim.keymap.set("n", "q", function()
-		if M.state.task_window and vim.api.nvim_win_is_valid(M.state.task_window) then
-			vim.api.nvim_win_close(M.state.task_window, true)
+		if state.windows.task and vim.api.nvim_win_is_valid(state.windows.task) then
+			vim.api.nvim_win_close(state.windows.task, true)
 		end
-		if M.state.output_window and vim.api.nvim_win_is_valid(M.state.output_window) then
-			vim.api.nvim_win_close(M.state.output_window, true)
+		if state.windows.output and vim.api.nvim_win_is_valid(state.windows.output) then
+			vim.api.nvim_win_close(state.windows.output, true)
 		end
-		if M.state.guide_win and vim.api.nvim_win_is_valid(M.state.guide_win) then
-			vim.api.nvim_win_close(M.state.guide_win, true)
+		if state.windows.guide and vim.api.nvim_win_is_valid(state.windows.guide) then
+			vim.api.nvim_win_close(state.windows.guide, true)
 		end
+		state.windows = { task = nil, output = nil, guide = nil }
 	end, opts)
 
 	vim.keymap.set("n", "x", function()
 		local line = vim.api.nvim_win_get_cursor(0)[1]
+		local executor = require("BuildSentry.executor")
 		executor.stop_task(line)
 	end, opts)
 
@@ -36,8 +30,15 @@ local function set_keymap()
 end
 
 function M.open()
-	local task_buf = vim.api.nvim_create_buf(false, true)
-	local output_buf = vim.api.nvim_create_buf(false, true)
+	if not state.buffers.task or not vim.api.nvim_buf_is_valid(state.buffers.task) then
+		state.buffers.task = vim.api.nvim_create_buf(false, true)
+		vim.api.nvim_buf_set_name(state.buffers.task, "BuildSentry Tasks")
+	end
+
+	if not state.buffers.output or not vim.api.nvim_buf_is_valid(state.buffers.output) then
+		state.buffers.output = vim.api.nvim_create_buf(false, true)
+		vim.api.nvim_buf_set_name(state.buffers.output, "BuildSentry Output")
+	end
 
 	local stats = vim.api.nvim_list_uis()[1]
 	local width = stats.width
@@ -51,7 +52,7 @@ function M.open()
 	local guide_height = math.ceil(win_height * 0.1)
 	local task_height = win_height - guide_height - 2
 
-	local task_window = vim.api.nvim_open_win(task_buf, true, {
+	state.windows.task = vim.api.nvim_open_win(state.buffers.task, true, {
 		relative = "editor",
 		row = row,
 		col = col,
@@ -64,9 +65,10 @@ function M.open()
 	})
 
 	local guide_buf = vim.api.nvim_create_buf(false, true)
-	vim.api.nvim_buf_set_lines(guide_buf, 0, -1, false, { " q:quit  x:kill  r:restart " })
+	vim.api.nvim_buf_set_lines(guide_buf, 0, -1, false, { " q:quit x:kill r:restart " })
+	state.buffers.guide = guide_buf
 
-	local guide_win = vim.api.nvim_open_win(guide_buf, false, {
+	state.windows.guide = vim.api.nvim_open_win(guide_buf, false, {
 		relative = "editor",
 		row = row + task_height + 2,
 		col = col,
@@ -76,7 +78,12 @@ function M.open()
 		border = "rounded",
 	})
 
-	local output_window = vim.api.nvim_open_win(output_buf, false, {
+	local current_output_buf = state.buffers.output
+	if #state.tasks > 0 then
+		current_output_buf = state.tasks[#state.tasks].bufnr
+	end
+
+	state.windows.output = vim.api.nvim_open_win(current_output_buf, false, {
 		relative = "editor",
 		row = row,
 		col = col + math.ceil(win_width * 0.3) + 2,
@@ -87,14 +94,6 @@ function M.open()
 		title = " Output ",
 		title_pos = "center",
 	})
-
-	M.state = {
-		task_window = task_window,
-		output_window = output_window,
-		task_buf = task_buf,
-		output_buf = output_buf,
-		guide_win = guide_win,
-	}
 
 	set_keymap()
 end

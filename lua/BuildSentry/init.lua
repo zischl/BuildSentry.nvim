@@ -3,13 +3,14 @@ BuildSentry.defaults = {
 	attach_cmake_tools = false,
 }
 
+local state = require("BuildSentry.state")
 local ui = require("BuildSentry.ui")
 local executor = require("BuildSentry.executor")
 local cmake_adapter = require("BuildSentry.adapter.cmake")
 
 BuildSentry.open = ui.open
 BuildSentry.exec = executor.exec
-BuildSentry.tasks = executor.tasks
+BuildSentry.tasks = state.tasks
 
 function BuildSentry.setup(opts)
 	BuildSentry.config = vim.tbl_deep_extend("force", BuildSentry.defaults, opts or {})

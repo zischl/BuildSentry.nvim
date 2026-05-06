@@ -1,6 +1,5 @@
 local M = {}
-
-M.tasks = {}
+local state = require("BuildSentry.state")
 
 function M.exec(name, cmd, cwd)
 	local bufnr = vim.api.nvim_create_buf(false, true)
@@ -14,26 +13,31 @@ function M.exec(name, cmd, cwd)
 		job_id = nil,
 	}
 
-	task.job_id = vim.fn.jobstart(cmd, {
-		cwd = cwd or vim.fn.getcwd(),
-		term = true,
-		on_stdout = function(_, data) end,
-		on_exit = function(_, code)
-			task.status = code == 0 and "SUCCESS" or "FAILED"
-			task.exit_code = code
-			print(string.format("BuildSentry: %s finished (%d)", name, code))
-			vim.api.nvim_buf_set_option(task.bufnr, "modifiable", true)
-		end,
-	})
+	vim.api.nvim_buf_call(bufnr, function()
+		task.job_id = vim.fn.termopen(cmd, {
+			cwd = cwd or vim.fn.getcwd(),
+			on_exit = function(_, code)
+				task.status = code == 0 and "SUCCESS" or "FAILED"
+				task.exit_code = code
+			end,
+		})
+	end)
 
-	table.insert(M.tasks, task)
+	table.insert(state.tasks, task)
+
+	if state.windows.output and vim.api.nvim_win_is_valid(state.windows.output) then
+		print(state.windows.output, task.bufnr)
+		vim.api.nvim_win_set_buf(state.windows.output, task.bufnr)
+	end
+
 	return task
 end
 
 function M.stop_task(task_index)
-	local task = M.tasks[task_index]
+	local task = state.tasks[task_index]
 	if task and task.job_id then
 		vim.fn.jobstop(task.job_id)
+		task.status = "TERMINATED"
 		print("Terminated: " .. task.name)
 	end
 end
