@@ -1,4 +1,7 @@
 local BuildSentry = {}
+BuildSentry.defaults = {
+	attach_cmake_tools = false,
+}
 
 local ui = require("BuildSentry.ui")
 local executor = require("BuildSentry.executor")
@@ -9,14 +12,16 @@ BuildSentry.exec = executor.exec
 BuildSentry.tasks = executor.tasks
 
 function BuildSentry.setup(opts)
-	cmake_adapter.attach()
+	BuildSentry.config = vim.tbl_deep_extend("force", BuildSentry.defaults, opts or {})
 
-	local ok_cmake, cmake = pcall(require, "cmake-tools")
-	if ok_cmake then
-		cmake.setup({
-			cmake_executor = { name = "buildsentry" },
-			cmake_runner = { name = "buildsentry" },
-		})
+	if BuildSentry.config.attach_cmake_tools then
+		cmake_adapter.attach()
+
+		local ok_const, const = pcall(require, "cmake-tools.const")
+		if ok_const then
+			const.cmake_executor.name = "buildsentry"
+			const.cmake_runner.name = "buildsentry"
+		end
 	end
 end
 
