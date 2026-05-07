@@ -5,7 +5,12 @@ local group = vim.api.nvim_create_augroup("BuildSentryUI", { clear = true })
 
 function M.init()
 	state.task_ns = vim.api.nvim_create_namespace("task")
+	state.task_hl_ns = vim.api.nvim_create_namespace("task_hl")
 	vim.api.nvim_set_hl(0, "BuildSentryStatus", { bg = "#458588", fg = "#ebdbb2", bold = false })
+	vim.api.nvim_set_hl(0, "BuildSentrySuccess", { fg = "#b8bb26", bold = true })
+	vim.api.nvim_set_hl(0, "BuildSentryFailed", { fg = "#fb4934", bold = true })
+	vim.api.nvim_set_hl(0, "BuildSentryRunning", { fg = "#fabd2f", bold = true })
+	vim.api.nvim_set_hl(0, "BuildSentryTerminated", { fg = "#928374", bold = true })
 end
 
 function M.highlight_active_task(line)
@@ -185,21 +190,44 @@ function M.refresh()
 	end
 
 	local lines = {}
+	local highlights = {}
+
 	for i, task in ipairs(state.tasks) do
 		local is_selected = i == state.active_task_index
 		local selector = is_selected and "" or " "
 
 		local status_icon = ""
+		local hl_group = "BuildSentryRunning"
+
 		if task.status == "SUCCESS" then
 			status_icon = ""
+			hl_group = "BuildSentrySuccess"
 		elseif task.status == "FAILED" then
 			status_icon = ""
+			hl_group = "BuildSentryFailed"
 		elseif task.status == "TERMINATED" then
 			status_icon = ""
+			hl_group = "BuildSentryTerminated"
 		end
 
-		table.insert(lines, string.format(" %s %s %s", selector, status_icon, task.name))
-		table.insert(lines, string.format("   > %s", task.status))
+		local line1 = string.format(" %s %s %s name: %s", selector, status_icon, task.status, task.name)
+
+		local line2_text = "..."
+		if task.bufnr and vim.api.nvim_buf_is_valid(task.bufnr) then
+			local count = vim.api.nvim_buf_line_count(task.bufnr)
+			if count > 0 then
+				local last_non_blank = vim.fn.prevnonblank(count)
+
+				if last_non_blank > 0 then
+					line2_text = vim.api.nvim_buf_get_lines(task.bufnr, last_non_blank - 1, last_non_blank, false)[1]
+				end
+			end
+		end
+
+		local line2 = string.format("   out: %s", line2_text)
+
+		table.insert(lines, line1)
+		table.insert(lines, line2)
 	end
 
 	vim.api.nvim_buf_set_lines(state.buffers.task, 0, -1, false, lines)
