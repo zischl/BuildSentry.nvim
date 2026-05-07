@@ -60,21 +60,59 @@ function M.open()
 		state.buffers.task = vim.api.nvim_create_buf(false, true)
 		vim.api.nvim_buf_set_name(state.buffers.task, "BuildSentry Tasks")
 
+		vim.api.nvim_create_autocmd("CursorMoved", {
+			group = group,
+			buffer = state.buffers.task,
+			callback = function()
+				state.cursor_row = vim.api.nvim_win_get_cursor(0)[1]
+				M.highlight_active_task(state.cursor_row)
+
+				local active_task_index = math.floor((state.cursor_row - 1) / 2) + 1
+
+				if active_task_index < 1 then
+					active_task_index = 1
+				end
+				if #state.tasks > 0 and active_task_index > #state.tasks then
+					active_task_index = #state.tasks
+				end
+
+				if state.active_task_index == active_task_index then
+					return
+				end
+
+				state.active_task_index = active_task_index
+				M.refresh()
+
+				if state.windows.output and vim.api.nvim_win_is_valid(state.windows.output) then
+					local task = state.tasks[active_task_index]
+					if task and task.bufnr and vim.api.nvim_buf_is_valid(task.bufnr) then
+						vim.schedule(function()
+							if vim.api.nvim_win_is_valid(state.windows.output) then
+								vim.api.nvim_win_set_buf(state.windows.output, task.bufnr)
+
+								local line_count = vim.api.nvim_buf_line_count(task.bufnr)
+								if line_count > 0 then
+									vim.api.nvim_win_set_cursor(state.windows.output, { line_count, 0 })
+								end
+
+								vim.cmd("redraw")
+							end
+						end)
+					end
+				end
+			end,
+		})
+
 		set_keymap()
 	end
-
-	vim.api.nvim_create_autocmd("CursorMoved", {
-		group = group,
-		buffer = state.buffers.task,
-		callback = function()
-			state.cursor_row = vim.api.nvim_win_get_cursor(0)[1]
-			M.highlight_active_task(state.cursor_row)
-		end,
-	})
 
 	if not state.buffers.output or not vim.api.nvim_buf_is_valid(state.buffers.output) then
 		state.buffers.output = vim.api.nvim_create_buf(false, true)
 		vim.api.nvim_buf_set_name(state.buffers.output, "BuildSentry Output")
+	end
+
+	if state.windows.output and vim.api.nvim_win_is_valid(state.windows.output) then
+		vim.api.nvim_win_close(state.windows.output, true)
 	end
 
 	local stats = vim.api.nvim_list_uis()[1]
@@ -117,7 +155,13 @@ function M.open()
 
 	local current_output_buf = state.buffers.output
 	if #state.tasks > 0 then
-		current_output_buf = state.tasks[#state.tasks].bufnr
+		local idx = state.active_task_index or 1
+		if idx > #state.tasks then
+			idx = #state.tasks
+		end
+		if state.tasks[idx] and state.tasks[idx].bufnr then
+			current_output_buf = state.tasks[idx].bufnr
+		end
 	end
 
 	state.windows.output = vim.api.nvim_open_win(current_output_buf, false, {
