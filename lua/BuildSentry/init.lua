@@ -24,6 +24,8 @@ function BuildSentry.setup(opts)
 			const.cmake_runner.name = "buildsentry"
 		end
 	end
+
+	ui.init()
 end
 
 return BuildSentry

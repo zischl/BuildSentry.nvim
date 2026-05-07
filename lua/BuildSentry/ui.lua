@@ -1,6 +1,31 @@
 local M = {}
 local state = require("BuildSentry.state")
 
+local group = vim.api.nvim_create_augroup("BuildSentryUI", { clear = true })
+
+function M.init()
+	state.task_ns = vim.api.nvim_create_namespace("task")
+	vim.api.nvim_set_hl(0, "BuildSentryStatus", { bg = "#458588", fg = "#ebdbb2", bold = false })
+end
+
+function M.highlight_active_task(line)
+	local start_line = math.floor((line - 1) / 2) * 2
+
+	local task_buf = state.buffers.task
+	if not task_buf or not vim.api.nvim_buf_is_valid(task_buf) then
+		return
+	end
+
+	vim.api.nvim_buf_clear_namespace(task_buf, state.task_ns, 0, -1)
+
+	vim.api.nvim_buf_set_extmark(task_buf, state.task_ns, start_line, 0, {
+		id = 1,
+		end_row = start_line + 2,
+		hl_group = "Visual",
+		hl_eol = true,
+	})
+end
+
 local function set_keymap()
 	local task_buf = state.buffers.task
 	local opts = { buffer = task_buf, silent = true }
@@ -20,8 +45,9 @@ local function set_keymap()
 
 	vim.keymap.set("n", "x", function()
 		local line = vim.api.nvim_win_get_cursor(0)[1]
+		local task_index = math.ceil(line / 2)
 		local executor = require("BuildSentry.executor")
-		executor.stop_task(line)
+		executor.stop_task(task_index)
 	end, opts)
 
 	vim.keymap.set("n", "r", function()
@@ -33,7 +59,18 @@ function M.open()
 	if not state.buffers.task or not vim.api.nvim_buf_is_valid(state.buffers.task) then
 		state.buffers.task = vim.api.nvim_create_buf(false, true)
 		vim.api.nvim_buf_set_name(state.buffers.task, "BuildSentry Tasks")
+
+		set_keymap()
 	end
+
+	vim.api.nvim_create_autocmd("CursorMoved", {
+		group = group,
+		buffer = state.buffers.task,
+		callback = function()
+			state.cursor_row = vim.api.nvim_win_get_cursor(0)[1]
+			M.highlight_active_task(state.cursor_row)
+		end,
+	})
 
 	if not state.buffers.output or not vim.api.nvim_buf_is_valid(state.buffers.output) then
 		state.buffers.output = vim.api.nvim_create_buf(false, true)
@@ -95,7 +132,33 @@ function M.open()
 		title_pos = "center",
 	})
 
-	set_keymap()
+	M.refresh()
+end
+
+function M.refresh()
+	if not state.buffers.task or not vim.api.nvim_buf_is_valid(state.buffers.task) then
+		return
+	end
+
+	local lines = {}
+	for i, task in ipairs(state.tasks) do
+		local is_selected = i == state.active_task_index
+		local selector = is_selected and "" or " "
+
+		local status_icon = ""
+		if task.status == "SUCCESS" then
+			status_icon = ""
+		elseif task.status == "FAILED" then
+			status_icon = ""
+		elseif task.status == "TERMINATED" then
+			status_icon = ""
+		end
+
+		table.insert(lines, string.format(" %s %s %s", selector, status_icon, task.name))
+		table.insert(lines, string.format("   > %s", task.status))
+	end
+
+	vim.api.nvim_buf_set_lines(state.buffers.task, 0, -1, false, lines)
 end
 
 return M
