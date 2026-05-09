@@ -3,32 +3,58 @@ local state = require("BuildSentry.state")
 
 function M.exec(name, cmd, cwd)
 	local bufnr = vim.api.nvim_create_buf(false, true)
+	local channel = vim.api.nvim_open_term(bufnr, {})
 
 	local task = {
 		name = name,
 		cmd = cmd,
 		bufnr = bufnr,
+		chan = channel,
 		status = "RUNNING",
 		exit_code = nil,
 		job_id = nil,
-		output = nil,
+		output = "",
 	}
 
-	vim.api.nvim_buf_call(bufnr, function()
-		task.job_id = vim.fn.termopen(cmd, {
-			cwd = cwd or vim.fn.getcwd(),
-			on_exit = function(_, code)
-				task.status = code == 0 and "SUCCESS" or "FAILED"
-				task.exit_code = code
-				vim.schedule(function()
-					local ui_ok, ui = pcall(require, "BuildSentry.ui")
-					if ui_ok then
-						ui.refresh()
-					end
-				end)
-			end,
-		})
-	end)
+	local function on_stdout(_, data)
+		if not data or (#data == 1 and data[1] == "") then
+			return
+		end
+
+		vim.api.nvim_chan_send(channel, table.concat(data, "\r\n"))
+
+		for i = #data, 1, -1 do
+			local line = data[i]:gsub("\r", ""):gsub("%s+$", "")
+			if line ~= "" then
+				task.output = line
+				break
+			end
+		end
+
+		vim.schedule(function()
+			local ui_ok, ui = pcall(require, "BuildSentry.ui")
+			if ui_ok then
+				ui.refresh()
+			end
+		end)
+	end
+
+	task.job_id = vim.fn.jobstart(cmd, {
+		cwd = cwd or vim.fn.getcwd(),
+		on_stdout = on_stdout,
+		on_stderr = on_stdout,
+		on_exit = function(_, code)
+			print(task.output)
+			task.status = code == 0 and "SUCCESS" or "FAILED"
+			task.exit_code = code
+			vim.schedule(function()
+				local ui_ok, ui = pcall(require, "BuildSentry.ui")
+				if ui_ok then
+					ui.refresh()
+				end
+			end)
+		end,
+	})
 
 	table.insert(state.tasks, task)
 

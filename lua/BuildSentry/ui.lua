@@ -211,20 +211,7 @@ function M.refresh()
 		end
 
 		local line1 = string.format(" %s %s %s name: %s", selector, status_icon, task.status, task.name)
-
-		local line2_text = "..."
-		if task.bufnr and vim.api.nvim_buf_is_valid(task.bufnr) then
-			local count = vim.api.nvim_buf_line_count(task.bufnr)
-			if count > 0 then
-				local last_non_blank = vim.fn.prevnonblank(count)
-
-				if last_non_blank > 0 then
-					line2_text = vim.api.nvim_buf_get_lines(task.bufnr, last_non_blank - 1, last_non_blank, false)[1]
-				end
-			end
-		end
-
-		local line2 = string.format("   out: %s", line2_text)
+		local line2 = string.format("   out: %s", task.output)
 
 		table.insert(lines, line1)
 		table.insert(lines, line2)
