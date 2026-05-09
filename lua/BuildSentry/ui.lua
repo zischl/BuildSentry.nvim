@@ -31,21 +31,31 @@ function M.highlight_active_task(line)
 	})
 end
 
+function M.close()
+	if state.windows.task and vim.api.nvim_win_is_valid(state.windows.task) then
+		vim.api.nvim_win_close(state.windows.task, true)
+	end
+	if state.windows.output and vim.api.nvim_win_is_valid(state.windows.output) then
+		vim.api.nvim_win_close(state.windows.output, true)
+	end
+	if state.windows.guide and vim.api.nvim_win_is_valid(state.windows.guide) then
+		vim.api.nvim_win_close(state.windows.guide, true)
+	end
+	state.windows = { task = nil, output = nil, guide = nil }
+end
+
+function M.update_guide(text)
+	if state.buffers.guide and vim.api.nvim_buf_is_valid(state.buffers.guide) then
+		vim.api.nvim_buf_set_lines(state.buffers.guide, 0, -1, false, { text })
+	end
+end
+
 local function set_keymap()
 	local task_buf = state.buffers.task
 	local opts = { buffer = task_buf, silent = true }
 
 	vim.keymap.set("n", "q", function()
-		if state.windows.task and vim.api.nvim_win_is_valid(state.windows.task) then
-			vim.api.nvim_win_close(state.windows.task, true)
-		end
-		if state.windows.output and vim.api.nvim_win_is_valid(state.windows.output) then
-			vim.api.nvim_win_close(state.windows.output, true)
-		end
-		if state.windows.guide and vim.api.nvim_win_is_valid(state.windows.guide) then
-			vim.api.nvim_win_close(state.windows.guide, true)
-		end
-		state.windows = { task = nil, output = nil, guide = nil }
+		M.close()
 	end, opts)
 
 	vim.keymap.set("n", "x", function()
@@ -53,6 +63,20 @@ local function set_keymap()
 		local task_index = math.ceil(line / 2)
 		local executor = require("BuildSentry.executor")
 		executor.stop_task(task_index)
+	end, opts)
+
+	vim.keymap.set("n", "e", function()
+		local line = vim.api.nvim_win_get_cursor(0)[1]
+		local task_index = math.ceil(line / 2)
+		local task = state.tasks[task_index]
+		if task and task.error then
+			local item = task.error
+			M.close()
+			if item.bufnr > 0 then
+				vim.api.nvim_set_current_buf(item.bufnr)
+				vim.api.nvim_win_set_cursor(0, { item.lnum, math.max(0, item.col - 1) })
+			end
+		end
 	end, opts)
 
 	vim.keymap.set("n", "r", function()
@@ -211,7 +235,7 @@ function M.refresh()
 		end
 
 		local line1 = string.format(" %s %s %s name: %s", selector, status_icon, task.status, task.name)
-		local line2 = string.format("   out: %s", task.output)
+		local line2 = string.format("   out: %s", task.output:gsub("\27%[[0-9;?]*[a-zA-Z]", ""))
 
 		table.insert(lines, line1)
 		table.insert(lines, line2)
