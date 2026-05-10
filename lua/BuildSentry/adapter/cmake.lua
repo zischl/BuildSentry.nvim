@@ -4,7 +4,7 @@ function M.get_adapter()
 	return {
 		name = "buildsentry",
 		run = function(cmd, env_script, env, args, cwd, opts, on_exit, on_output)
-			local BuildSentry = require("BuildSentry")
+			local BuildSentry = require("buildsentry")
 			local name = opts.title or (args and args[1]) or "CMake Task"
 			local full_cmd = cmd .. " " .. table.concat(args, " ")
 
@@ -17,7 +17,7 @@ function M.get_adapter()
 		end,
 
 		show = function(opts)
-			require("BuildSentry").open()
+			require("buildsentry").open()
 		end,
 		close = function(opts) end,
 		stop = function(opts) end,
