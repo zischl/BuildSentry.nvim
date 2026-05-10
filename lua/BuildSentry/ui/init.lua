@@ -1,9 +1,10 @@
 local M = {}
 local state = require("buildsentry.state")
 local window = require("buildsentry.ui.window")
-local render = require("buildsentry.ui.render")
 local guide = require("buildsentry.ui.guide")
 local actions = require("buildsentry.ui.actions")
+
+M.task_list = require("buildsentry.ui.task_list")
 
 local group = vim.api.nvim_create_augroup("BuildSentryUI", { clear = true })
 
@@ -13,13 +14,6 @@ function M.init()
 	vim.api.nvim_set_hl(0, "BuildSentryFailed", { fg = "#fb4934", bold = true })
 	vim.api.nvim_set_hl(0, "BuildSentryRunning", { fg = "#fabd2f", bold = true })
 	vim.api.nvim_set_hl(0, "BuildSentryTerminated", { fg = "#928374", bold = true })
-end
-
-function M.highlight_active_task(line)
-	if not state.buffers.task or not vim.api.nvim_buf_is_valid(state.buffers.task) then
-		return
-	end
-	render.highlight_active(state.buffers.task, state.task_ns, line)
 end
 
 function M.close()
@@ -33,6 +27,7 @@ function M.close()
 		vim.api.nvim_win_close(state.windows.guide, true)
 	end
 	state.windows = { task = nil, output = nil, guide = nil }
+	vim.cmd("redraw")
 end
 
 function M.update_guide()
@@ -53,6 +48,8 @@ function M.update_guide()
 end
 
 function M.open()
+	M.close()
+
 	if not state.buffers.task or not vim.api.nvim_buf_is_valid(state.buffers.task) then
 		state.buffers.task = vim.api.nvim_create_buf(false, true)
 		vim.api.nvim_buf_set_name(state.buffers.task, "BuildSentry Tasks")
@@ -61,46 +58,9 @@ function M.open()
 			group = group,
 			buffer = state.buffers.task,
 			callback = function()
-				state.cursor_row = vim.api.nvim_win_get_cursor(0)[1]
-				M.highlight_active_task(state.cursor_row)
-
-				local active_task_index = math.floor((state.cursor_row - 1) / 2) + 1
-
-				if active_task_index < 1 then
-					active_task_index = 1
-				end
-				if #state.tasks > 0 and active_task_index > #state.tasks then
-					active_task_index = #state.tasks
-				end
-
-				if state.active_task_index == active_task_index then
-					return
-				end
-
-				state.active_task_index = active_task_index
-				M.refresh()
-
-				if state.windows.output and vim.api.nvim_win_is_valid(state.windows.output) then
-					local task = state.tasks[active_task_index]
-					if task and task.bufnr and vim.api.nvim_buf_is_valid(task.bufnr) then
-						vim.schedule(function()
-							if vim.api.nvim_win_is_valid(state.windows.output) then
-								vim.api.nvim_win_set_buf(state.windows.output, task.bufnr)
-
-								local line_count = vim.api.nvim_buf_line_count(task.bufnr)
-								if line_count > 0 then
-									vim.api.nvim_win_set_cursor(state.windows.output, { line_count, 0 })
-								end
-
-								vim.cmd("redraw")
-							end
-						end)
-					end
-				end
+				M.task_list.on_cursor_moved()
 			end,
 		})
-
-		M.update_guide()
 	end
 
 	if not state.buffers.output or not vim.api.nvim_buf_is_valid(state.buffers.output) then
@@ -152,10 +112,7 @@ function M.open()
 end
 
 function M.refresh()
-	if not state.buffers.task or not vim.api.nvim_buf_is_valid(state.buffers.task) then
-		return
-	end
-	render.task_list(state.buffers.task, state.tasks, state.active_task_index)
+	M.task_list.refresh()
 	M.update_guide()
 end
 

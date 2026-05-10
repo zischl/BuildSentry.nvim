@@ -11,6 +11,7 @@ local M = {}
 ---@field exit_code number|nil
 ---@field output string
 ---@field error table|nil
+---@field extmark_id number|nil
 local Task = {}
 Task.__index = Task
 
@@ -45,6 +46,7 @@ function Task.new(name, cmd, cwd)
 		job_id = nil,
 		output = "",
 		error = nil,
+		extmark_id = nil,
 	}, Task)
 
 	return self
@@ -77,7 +79,7 @@ function Task:start()
 		vim.schedule(function()
 			local ui_ok, ui = pcall(require, "buildsentry.ui")
 			if ui_ok then
-				ui.refresh()
+				ui.task_list.update(self)
 			end
 		end)
 	end
@@ -99,7 +101,8 @@ function Task:start()
 			vim.schedule(function()
 				local ui_ok, ui = pcall(require, "buildsentry.ui")
 				if ui_ok then
-					ui.refresh()
+					ui.task_list.update(self)
+					ui.update_guide()
 				end
 			end)
 		end,
