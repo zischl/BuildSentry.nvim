@@ -32,20 +32,22 @@ function M.refresh()
 	end
 
 	local lines = {}
+	local virt_lines_data = {}
 	vim.api.nvim_buf_clear_namespace(buf, M.ns, 0, -1)
 
 	for i, task in ipairs(state.tasks) do
 		local selected = i == state.active_task_index
 		local t_lines = M.generate_task_format(task, selected)
 		table.insert(lines, t_lines[1])
-		table.insert(lines, t_lines[2])
+		table.insert(virt_lines_data, t_lines[2])
 	end
 
 	vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
 
 	for i, task in ipairs(state.tasks) do
-		task.extmark_id = vim.api.nvim_buf_set_extmark(buf, M.ns, (i - 1) * 2, 0, {
+		task.extmark_id = vim.api.nvim_buf_set_extmark(buf, M.ns, i - 1, 0, {
 			id = task.extmark_id,
+			virt_lines = { { { virt_lines_data[i], "Comment" } } },
 		})
 	end
 end
@@ -61,9 +63,11 @@ function M.add(task)
 	state.active_task_index = 1
 
 	local lines = M.generate_task_format(task, true)
-	vim.api.nvim_buf_set_lines(buf, 0, 0, false, lines)
+	vim.api.nvim_buf_set_lines(buf, 0, 0, false, { lines[1] })
 
-	task.extmark_id = vim.api.nvim_buf_set_extmark(buf, M.ns, 0, 0, {})
+	task.extmark_id = vim.api.nvim_buf_set_extmark(buf, M.ns, 0, 0, {
+		virt_lines = { { { lines[2], "Comment" } } },
+	})
 
 	local win = state.windows.task
 	if win and vim.api.nvim_win_is_valid(win) then
@@ -85,14 +89,15 @@ function M.update(task)
 	end
 
 	local task_line = mark[1]
-	local task_index = math.floor(task_line / 2) + 1
+	local task_index = task_line + 1
 	local selected = task_index == state.active_task_index
 
 	local lines = M.generate_task_format(task, selected)
-	vim.api.nvim_buf_set_lines(buf, task_line, task_line + 2, false, lines)
+	vim.api.nvim_buf_set_lines(buf, task_line, task_line + 1, false, { lines[1] })
 
 	task.extmark_id = vim.api.nvim_buf_set_extmark(buf, M.ns, task_line, 0, {
 		id = task.extmark_id,
+		virt_lines = { { { lines[2], "Comment" } } },
 	})
 end
 
@@ -108,7 +113,7 @@ function M.remove(task)
 	end
 
 	local task_line = mark[1]
-	vim.api.nvim_buf_set_lines(buf, task_line, task_line + 2, false, {})
+	vim.api.nvim_buf_set_lines(buf, task_line, task_line + 1, false, {})
 	vim.api.nvim_buf_del_extmark(buf, M.ns, task.extmark_id)
 
 	for i, t in ipairs(state.tasks) do
@@ -132,12 +137,12 @@ function M.highlight(line)
 		return
 	end
 
-	local start_line = math.floor((line - 1) / 2) * 2
+	local start_line = line - 1
 	if start_line >= line_count then
-		start_line = math.max(0, line_count - 2)
+		start_line = math.max(0, line_count - 1)
 	end
 
-	local end_row = start_line + 2
+	local end_row = start_line + 1
 	if end_row > line_count then
 		end_row = line_count
 	end
@@ -161,7 +166,7 @@ function M.on_cursor_moved()
 	state.cursor_row = cursor_line
 	M.highlight(cursor_line)
 
-	local active_task_index = math.floor((cursor_line - 1) / 2) + 1
+	local active_task_index = cursor_line
 	if active_task_index < 1 then
 		active_task_index = 1
 	end
