@@ -18,6 +18,15 @@ function M.generate_task_format(task, selected)
 	local line1 = string.format(" %s %s %s name: %s", selector, status_icon, task.status, task.name)
 	local line2 = string.format("   out: %s", task.output:gsub("\27%[[0-9;?]*[a-zA-Z]", ""))
 
+	local win = state.windows.task
+	if win and vim.api.nvim_win_is_valid(win) then
+		local width = vim.api.nvim_win_get_width(win)
+		local pad_len = width - vim.fn.strdisplaywidth(line2)
+		if pad_len > 0 then
+			line2 = line2 .. string.rep(" ", pad_len)
+		end
+	end
+
 	return { line1, line2 }
 end
 
@@ -45,10 +54,16 @@ function M.refresh()
 	vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
 
 	for i, task in ipairs(state.tasks) do
-		task.extmark_id = vim.api.nvim_buf_set_extmark(buf, M.ns, i - 1, 0, {
+		local selected = i == state.active_task_index
+		local opts = {
 			id = task.extmark_id,
-			virt_lines = { { { virt_lines_data[i], "Comment" } } },
-		})
+			virt_lines = { { { virt_lines_data[i], selected and "Visual" or "Comment" } } },
+		}
+		if selected then
+			opts.line_hl_group = "Visual"
+		end
+
+		task.extmark_id = vim.api.nvim_buf_set_extmark(buf, M.ns, i - 1, 0, opts)
 	end
 end
 
@@ -65,16 +80,17 @@ function M.add(task)
 	local lines = M.generate_task_format(task, true)
 	vim.api.nvim_buf_set_lines(buf, 0, 0, false, { lines[1] })
 
-	task.extmark_id = vim.api.nvim_buf_set_extmark(buf, M.ns, 0, 0, {
-		virt_lines = { { { lines[2], "Comment" } } },
-	})
+	local opts = {
+		virt_lines = { { { lines[2], "Visual" } } },
+		line_hl_group = "Visual",
+	}
+
+	task.extmark_id = vim.api.nvim_buf_set_extmark(buf, M.ns, 0, 0, opts)
 
 	local win = state.windows.task
 	if win and vim.api.nvim_win_is_valid(win) then
 		vim.api.nvim_win_set_cursor(win, { 1, 0 })
 	end
-
-	M.highlight(1)
 end
 
 function M.update(task)
@@ -94,11 +110,15 @@ function M.update(task)
 
 	local lines = M.generate_task_format(task, selected)
 	vim.api.nvim_buf_set_lines(buf, task_line, task_line + 1, false, { lines[1] })
-
-	task.extmark_id = vim.api.nvim_buf_set_extmark(buf, M.ns, task_line, 0, {
+	local opts = {
 		id = task.extmark_id,
-		virt_lines = { { { lines[2], "Comment" } } },
-	})
+		virt_lines = { { { lines[2], selected and "Visual" or "Comment" } } },
+	}
+	if selected then
+		opts.line_hl_group = "Visual"
+	end
+
+	task.extmark_id = vim.api.nvim_buf_set_extmark(buf, M.ns, task_line, 0, opts)
 end
 
 function M.remove(task)
@@ -126,36 +146,6 @@ function M.remove(task)
 	M.refresh()
 end
 
-function M.highlight(line)
-	local buf = M.get_buf()
-	if not buf or not vim.api.nvim_buf_is_valid(buf) then
-		return
-	end
-
-	local line_count = vim.api.nvim_buf_line_count(buf)
-	if line_count == 0 then
-		return
-	end
-
-	local start_line = line - 1
-	if start_line >= line_count then
-		start_line = math.max(0, line_count - 1)
-	end
-
-	local end_row = start_line + 1
-	if end_row > line_count then
-		end_row = line_count
-	end
-
-	vim.api.nvim_buf_clear_namespace(buf, state.task_ns, 0, -1)
-	vim.api.nvim_buf_set_extmark(buf, state.task_ns, start_line, 0, {
-		id = 1,
-		end_row = end_row,
-		hl_group = "Visual",
-		hl_eol = true,
-	})
-end
-
 function M.on_cursor_moved()
 	local window = state.windows.task
 	if not window or not vim.api.nvim_win_is_valid(window) then
@@ -163,8 +153,6 @@ function M.on_cursor_moved()
 	end
 
 	local cursor_line = vim.api.nvim_win_get_cursor(window)[1]
-	state.cursor_row = cursor_line
-	M.highlight(cursor_line)
 
 	local active_task_index = cursor_line
 	if active_task_index < 1 then
