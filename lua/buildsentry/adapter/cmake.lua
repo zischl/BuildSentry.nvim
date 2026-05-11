@@ -1,11 +1,43 @@
 local M = {}
 
+function M.generate_task_name(cmd, args, opts)
+	if opts.title and opts.title ~= "" then
+		return opts.title
+	end
+
+	if args then
+		local target = nil
+		local build = false
+		for i, arg in ipairs(args) do
+			if arg == "--target" and args[i + 1] then
+				target = args[i + 1]
+			elseif arg == "--build" then
+				build = true
+			end
+		end
+
+		if target then
+			return "CMake Build: " .. target
+		elseif build then
+			return "CMake Build"
+		end
+	end
+
+	if cmd:match("cmake$") or cmd:match("cmake.exe$") then
+		return "CMake Configure"
+	end
+
+	local exe_name = vim.fn.fnamemodify(cmd, ":t")
+	return "Run: " .. exe_name
+end
+
 function M.get_adapter()
 	return {
 		name = "buildsentry",
 		run = function(cmd, env_script, env, args, cwd, opts, on_exit, on_output)
 			local BuildSentry = require("buildsentry")
-			local name = opts.title or (args and args[1]) or "CMake Task"
+
+			local name = M.generate_task_name(cmd, args, opts)
 			local full_cmd = cmd .. " " .. table.concat(args, " ")
 
 			BuildSentry.exec(name, full_cmd, cwd)

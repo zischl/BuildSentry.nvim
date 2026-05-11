@@ -19,7 +19,7 @@ function M.generate_task_format(task, selected)
 		status_hl = "DiagnosticWarn"
 	end
 
-	local line1 = string.format(" %s %s %s name: %s", selector, status_icon, task.status, task.name)
+	local line1 = string.format(" %s %s %s Task: %s", selector, status_icon, task.status, task.name)
 
 	local prefix = "  out: "
 	local prefix_width = vim.fn.strdisplaywidth(prefix)
