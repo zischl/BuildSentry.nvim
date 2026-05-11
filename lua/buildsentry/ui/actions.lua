@@ -10,6 +10,22 @@ M.global = {
 			require("buildsentry.ui").close()
 		end,
 	},
+	{
+		key = "h",
+		label = "h:home",
+		enabled = true,
+		get_state = function()
+			local state = require("buildsentry.state")
+			if not state.windows.output or not vim.api.nvim_win_is_valid(state.windows.output) then
+				return false
+			end
+			local current_buf = vim.api.nvim_win_get_buf(state.windows.output)
+			return current_buf ~= state.buffers.output
+		end,
+		fn = function()
+			require("buildsentry.ui").home()
+		end,
+	},
 }
 
 M.task_list = {
@@ -93,6 +109,22 @@ M.task_list = {
 				vim.fn.setreg("+", task.cmd)
 				vim.notify("Copied command to clipboard")
 			end
+		end,
+	},
+	{
+		key = "o",
+		label = "o:output",
+		enabled = true,
+		get_state = function()
+			local state = require("buildsentry.state")
+			if not state.windows.output or not vim.api.nvim_win_is_valid(state.windows.output) then
+				return false
+			end
+			local current_buf = vim.api.nvim_win_get_buf(state.windows.output)
+			return current_buf == state.buffers.output
+		end,
+		fn = function()
+			require("buildsentry.ui.task_list").set_output()
 		end,
 	},
 }

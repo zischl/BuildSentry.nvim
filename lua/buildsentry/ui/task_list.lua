@@ -108,6 +108,25 @@ function M.refresh()
 	end
 end
 
+function M.set_output(index)
+	index = index or state.active_task_index
+	local task = state.tasks[index]
+	if not task or not task.bufnr or not vim.api.nvim_buf_is_valid(task.bufnr) then
+		return
+	end
+
+	local win_out = state.windows.output
+	if win_out and vim.api.nvim_win_is_valid(win_out) then
+		vim.api.nvim_win_set_buf(win_out, task.bufnr)
+		local line_count = vim.api.nvim_buf_line_count(task.bufnr)
+		if line_count > 0 then
+			vim.api.nvim_win_set_cursor(win_out, { line_count, 0 })
+		end
+		require("buildsentry.ui").update_guide()
+		vim.cmd("redraw")
+	end
+end
+
 function M.add(task)
 	local buf = M.get_buf()
 	if not buf or not vim.api.nvim_buf_is_valid(buf) then

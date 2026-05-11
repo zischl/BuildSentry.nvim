@@ -26,40 +26,17 @@ function M.close()
 	vim.cmd("redraw")
 end
 
-function M.reset()
+function M.home()
 	local task_list = require("buildsentry.ui.task_list")
-	local buf_task = state.buffers.task
 	local buf_out = state.buffers.output
-	local win_task = state.windows.task
 	local win_out = state.windows.output
 
-	if
-		not buf_task
-		or not buf_out
-		or not vim.api.nvim_win_is_valid(win_task)
-		or not vim.api.nvim_win_is_valid(win_out)
-	then
+	if not buf_out or not win_out or not vim.api.nvim_win_is_valid(win_out) then
 		return
 	end
 
-	local w_task = vim.api.nvim_win_get_width(win_task)
-	local h_task = vim.api.nvim_win_get_height(win_task)
 	local w_out = vim.api.nvim_win_get_width(win_out)
 	local h_out = vim.api.nvim_win_get_height(win_out)
-
-	local task_msg = "No tasks available"
-	local mid_point = math.floor(h_task / 2)
-	local task_lines = {}
-	for _ = 1, mid_point do
-		table.insert(task_lines, "")
-	end
-
-	local task_padding = math.max(0, math.floor((w_task - vim.fn.strdisplaywidth(task_msg)) / 2))
-	table.insert(task_lines, string.rep(" ", task_padding) .. task_msg)
-
-	vim.api.nvim_buf_set_lines(buf_task, 0, -1, false, task_lines)
-	vim.api.nvim_buf_clear_namespace(buf_task, task_list.ns, 0, -1)
-	vim.api.nvim_buf_add_highlight(buf_task, task_list.ns, "Comment", mid_point, 0, -1)
 
 	local logo = {
 		"        ██████╗ ██╗   ██╗██╗██╗     ██████╗          ",
@@ -126,6 +103,35 @@ function M.reset()
 
 	vim.api.nvim_win_set_buf(win_out, buf_out)
 	M.update_guide()
+end
+
+function M.reset()
+	local task_list = require("buildsentry.ui.task_list")
+	local buf_task = state.buffers.task
+	local win_task = state.windows.task
+
+	if not buf_task or not win_task or not vim.api.nvim_win_is_valid(win_task) then
+		return
+	end
+
+	local w_task = vim.api.nvim_win_get_width(win_task)
+	local h_task = vim.api.nvim_win_get_height(win_task)
+
+	local task_msg = "No tasks available"
+	local mid_point = math.floor(h_task / 2)
+	local task_lines = {}
+	for _ = 1, mid_point do
+		table.insert(task_lines, "")
+	end
+
+	local task_padding = math.max(0, math.floor((w_task - vim.fn.strdisplaywidth(task_msg)) / 2))
+	table.insert(task_lines, string.rep(" ", task_padding) .. task_msg)
+
+	vim.api.nvim_buf_set_lines(buf_task, 0, -1, false, task_lines)
+	vim.api.nvim_buf_clear_namespace(buf_task, task_list.ns, 0, -1)
+	vim.api.nvim_buf_add_highlight(buf_task, task_list.ns, "Comment", mid_point, 0, -1)
+
+	M.home()
 end
 
 function M.update_guide()
