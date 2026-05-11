@@ -5,6 +5,9 @@
 A Neovim plugin for managing and monitoring build/run tasks directly inside the editor. It provides a multi-pane floating UI with a live task list, real-time output streaming, and first-class integration with [cmake-tools.nvim](https://github.com/Civitasv/cmake-tools.nvim).
 
 ---
+## Demo
+<img width="1568" height="868" alt="Screenshot 2026-05-11 161403" src="https://github.com/user-attachments/assets/fc298cb0-b1ae-4aeb-9a9b-e22b18720a57" />
+
 
 ## Features
 
@@ -50,7 +53,7 @@ A Neovim plugin for managing and monitoring build/run tasks directly inside the 
   "Civitasv/cmake-tools.nvim",
   opts = {
     cmake_command = "cmake",  --Not really necessary for BuildSentry
-    ctest_command = "ctest",  --This too
+    ctest_command = "ctest",  --This too, u do u
     cmake_regenerate_on_save = true,  --Personal preference
     cmake_generate_options = { "-DCMAKE_EXPORT_COMPILE_COMMANDS=1" }, --To generate compile_commands.json
     cmake_build_directory = "build/${variant:buildType}",  --Personal preference
