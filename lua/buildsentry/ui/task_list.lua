@@ -7,27 +7,62 @@ function M.generate_task_format(task, selected)
 	local selector = selected and "" or " "
 
 	local status_icon = ""
+	local status_hl = "DiagnosticInfo"
 	if task.status == "SUCCESS" then
 		status_icon = ""
+		status_hl = "DiagnosticOk"
 	elseif task.status == "FAILED" then
 		status_icon = ""
+		status_hl = "DiagnosticError"
 	elseif task.status == "TERMINATED" then
 		status_icon = ""
+		status_hl = "DiagnosticWarn"
 	end
 
 	local line1 = string.format(" %s %s %s name: %s", selector, status_icon, task.status, task.name)
-	local line2 = string.format("   out: %s", task.output:gsub("\27%[[0-9;?]*[a-zA-Z]", ""))
 
-	local win = state.windows.task
-	if win and vim.api.nvim_win_is_valid(win) then
-		local width = vim.api.nvim_win_get_width(win)
-		local pad_len = width - vim.fn.strdisplaywidth(line2)
-		if pad_len > 0 then
-			line2 = line2 .. string.rep(" ", pad_len)
+	local prefix = "  out: "
+	local prefix_width = vim.fn.strdisplaywidth(prefix)
+	local line2 = task.output:gsub("\27%[[0-9;?]*[a-zA-Z]", ""):gsub("^%s+", "")
+
+	local window = state.windows.task
+	local padding = 0
+	if window and vim.api.nvim_win_is_valid(window) then
+		local width = vim.api.nvim_win_get_width(window)
+		local available_width = width - prefix_width
+		local line2_width = vim.fn.strdisplaywidth(line2)
+		padding = available_width - line2_width
+		if padding < 0 then
+			line2 = vim.fn.strpart(line2, 0, available_width - 3) .. "..."
+			padding = 0
 		end
 	end
 
-	return { line1, line2 }
+	local status_start = 1 + #selector + 1
+	local status_end = status_start + #status_icon + 1 + #task.status
+	local name_start = status_end + 7
+
+	local highlights = {
+		{ group = status_hl, start_col = status_start, end_col = status_end },
+		{ group = "Comment", start_col = status_end, end_col = name_start },
+		{ group = "Title", start_col = name_start, end_col = -1 },
+	}
+
+	local virt_lines = {}
+	local padding_str = padding > 0 and string.rep(" ", padding) or ""
+
+	if selected then
+		virt_lines = { { { prefix, "Visual" }, { line2, "Visual" }, { padding_str, "Visual" } } }
+	else
+		virt_lines = { { { prefix, "Comment" }, { line2, "Directory" }, { padding_str, "Normal" } } }
+	end
+
+	return {
+		line1 = line1,
+		line2 = line2,
+		virt_lines = virt_lines,
+		highlights = highlights,
+	}
 end
 
 function M.get_buf()
@@ -41,23 +76,29 @@ function M.refresh()
 	end
 
 	local lines = {}
-	local virt_lines_data = {}
+	local task_formats = {}
 	vim.api.nvim_buf_clear_namespace(buf, M.ns, 0, -1)
 
 	for i, task in ipairs(state.tasks) do
 		local selected = i == state.active_task_index
-		local t_lines = M.generate_task_format(task, selected)
-		table.insert(lines, t_lines[1])
-		table.insert(virt_lines_data, t_lines[2])
+		local tf = M.generate_task_format(task, selected)
+		table.insert(lines, tf.line1)
+		table.insert(task_formats, tf)
 	end
 
 	vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
 
 	for i, task in ipairs(state.tasks) do
 		local selected = i == state.active_task_index
+		local tf = task_formats[i]
+
+		for _, hl in ipairs(tf.highlights) do
+			vim.api.nvim_buf_add_highlight(buf, M.ns, hl.group, i - 1, hl.start_col, hl.end_col)
+		end
+
 		local opts = {
 			id = task.extmark_id,
-			virt_lines = { { { virt_lines_data[i], selected and "Visual" or "Comment" } } },
+			virt_lines = tf.virt_lines,
 		}
 		if selected then
 			opts.line_hl_group = "Visual"
@@ -77,11 +118,15 @@ function M.add(task)
 	table.insert(state.tasks, 1, task)
 	state.active_task_index = 1
 
-	local lines = M.generate_task_format(task, true)
-	vim.api.nvim_buf_set_lines(buf, 0, 0, false, { lines[1] })
+	local tf = M.generate_task_format(task, true)
+	vim.api.nvim_buf_set_lines(buf, 0, 0, false, { tf.line1 })
+
+	for _, hl in ipairs(tf.highlights) do
+		vim.api.nvim_buf_add_highlight(buf, M.ns, hl.group, 0, hl.start_col, hl.end_col)
+	end
 
 	local opts = {
-		virt_lines = { { { lines[2], "Visual" } } },
+		virt_lines = tf.virt_lines,
 		line_hl_group = "Visual",
 	}
 
@@ -108,11 +153,18 @@ function M.update(task)
 	local task_index = task_line + 1
 	local selected = task_index == state.active_task_index
 
-	local lines = M.generate_task_format(task, selected)
-	vim.api.nvim_buf_set_lines(buf, task_line, task_line + 1, false, { lines[1] })
+	local tf = M.generate_task_format(task, selected)
+
+	vim.api.nvim_buf_clear_namespace(buf, M.ns, task_line, task_line + 1)
+	vim.api.nvim_buf_set_lines(buf, task_line, task_line + 1, false, { tf.line1 })
+
+	for _, hl in ipairs(tf.highlights) do
+		vim.api.nvim_buf_add_highlight(buf, M.ns, hl.group, task_line, hl.start_col, hl.end_col)
+	end
+
 	local opts = {
 		id = task.extmark_id,
-		virt_lines = { { { lines[2], selected and "Visual" or "Comment" } } },
+		virt_lines = tf.virt_lines,
 	}
 	if selected then
 		opts.line_hl_group = "Visual"

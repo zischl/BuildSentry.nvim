@@ -10,10 +10,6 @@ local group = vim.api.nvim_create_augroup("BuildSentryUI", { clear = true })
 
 function M.init()
 	state.task_ns = vim.api.nvim_create_namespace("task")
-	vim.api.nvim_set_hl(0, "BuildSentrySuccess", { fg = "#b8bb26", bold = true })
-	vim.api.nvim_set_hl(0, "BuildSentryFailed", { fg = "#fb4934", bold = true })
-	vim.api.nvim_set_hl(0, "BuildSentryRunning", { fg = "#fabd2f", bold = true })
-	vim.api.nvim_set_hl(0, "BuildSentryTerminated", { fg = "#928374", bold = true })
 end
 
 function M.close()
