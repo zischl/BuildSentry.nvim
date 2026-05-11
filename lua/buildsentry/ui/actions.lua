@@ -5,6 +5,7 @@ M.global = {
 	{
 		key = "q",
 		label = "q:quit",
+		enabled = true,
 		fn = function()
 			require("buildsentry.ui").close()
 		end,
@@ -15,6 +16,10 @@ M.task_list = {
 	{
 		key = "x",
 		label = "x:kill",
+		enabled = true,
+		get_state = function(task)
+			return task and task.status == "RUNNING"
+		end,
 		fn = function(_, idx)
 			executor.stop_task(idx)
 		end,
@@ -22,6 +27,7 @@ M.task_list = {
 	{
 		key = "r",
 		label = "r:restart",
+		enabled = true,
 		fn = function(_, idx)
 			executor.restart_task(idx)
 		end,
@@ -29,7 +35,8 @@ M.task_list = {
 	{
 		key = "e",
 		label = "e:goto error",
-		enabled = function(task)
+		enabled = false,
+		get_state = function(task)
 			return task and task.error ~= nil
 		end,
 		fn = function(task)
@@ -43,6 +50,46 @@ M.task_list = {
 
 					vim.api.nvim_win_set_cursor(0, { item.lnum, math.max(0, item.col - 1) })
 				end)
+			end
+		end,
+	},
+
+	{
+		key = "d",
+		label = "d:delete",
+		enabled = true,
+		fn = function(task)
+			if task then
+				task:stop()
+				require("buildsentry.ui.task_list").remove(task)
+			end
+		end,
+	},
+
+	{
+		key = "C",
+		label = "C:clear completed",
+		enabled = true,
+		fn = function()
+			local state = require("buildsentry.state")
+			local task_list = require("buildsentry.ui.task_list")
+			for i = #state.tasks, 1, -1 do
+				local t = state.tasks[i]
+				if t.status ~= "RUNNING" then
+					task_list.remove(t)
+				end
+			end
+		end,
+	},
+
+	{
+		key = "c",
+		label = "c:copy cmd",
+		enabled = true,
+		fn = function(task)
+			if task and task.cmd then
+				vim.fn.setreg("+", task.cmd)
+				vim.notify("Copied command to clipboard")
 			end
 		end,
 	},

@@ -33,14 +33,18 @@ function M.update_guide()
 	local sets = { actions.global, actions.task_list }
 	for _, set in ipairs(sets) do
 		for _, action in ipairs(set) do
-			if not action.enabled or action.enabled(active_task) then
+			local is_active = action.enabled ~= false
+			if action.get_state then
+				is_active = action.get_state(active_task)
+			end
+
+			if is_active then
 				table.insert(active_actions, action)
 			end
 		end
 	end
 
-	guide.reset()
-	guide.add(active_actions)
+	guide.set(active_actions)
 end
 
 function M.open()
