@@ -54,7 +54,7 @@ function M.generate_task_format(task, selected)
 	if selected then
 		virt_lines = { { { prefix, "Visual" }, { line2, "Visual" }, { padding_str, "Visual" } } }
 	else
-		virt_lines = { { { prefix, "Comment" }, { line2, "Directory" }, { padding_str, "Normal" } } }
+		virt_lines = { { { prefix, "Comment" }, { line2, "Directory" }, { padding_str, "" } } }
 	end
 
 	return {
@@ -155,7 +155,6 @@ function M.update(task)
 
 	local tf = M.generate_task_format(task, selected)
 
-	vim.api.nvim_buf_clear_namespace(buf, M.ns, task_line, task_line + 1)
 	vim.api.nvim_buf_set_lines(buf, task_line, task_line + 1, false, { tf.line1 })
 
 	for _, hl in ipairs(tf.highlights) do

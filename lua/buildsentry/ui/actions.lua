@@ -62,6 +62,7 @@ M.task_list = {
 			if task then
 				task:stop()
 				require("buildsentry.ui.task_list").remove(task)
+				require("buildsentry.ui").refresh()
 			end
 		end,
 	},
@@ -79,6 +80,7 @@ M.task_list = {
 					task_list.remove(t)
 				end
 			end
+			require("buildsentry.ui").refresh()
 		end,
 	},
 

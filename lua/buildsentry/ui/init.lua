@@ -26,6 +26,108 @@ function M.close()
 	vim.cmd("redraw")
 end
 
+function M.reset()
+	local task_list = require("buildsentry.ui.task_list")
+	local buf_task = state.buffers.task
+	local buf_out = state.buffers.output
+	local win_task = state.windows.task
+	local win_out = state.windows.output
+
+	if
+		not buf_task
+		or not buf_out
+		or not vim.api.nvim_win_is_valid(win_task)
+		or not vim.api.nvim_win_is_valid(win_out)
+	then
+		return
+	end
+
+	local w_task = vim.api.nvim_win_get_width(win_task)
+	local h_task = vim.api.nvim_win_get_height(win_task)
+	local w_out = vim.api.nvim_win_get_width(win_out)
+	local h_out = vim.api.nvim_win_get_height(win_out)
+
+	local task_msg = "No tasks available"
+	local mid_point = math.floor(h_task / 2)
+	local task_lines = {}
+	for _ = 1, mid_point do
+		table.insert(task_lines, "")
+	end
+
+	local task_padding = math.max(0, math.floor((w_task - vim.fn.strdisplaywidth(task_msg)) / 2))
+	table.insert(task_lines, string.rep(" ", task_padding) .. task_msg)
+
+	vim.api.nvim_buf_set_lines(buf_task, 0, -1, false, task_lines)
+	vim.api.nvim_buf_clear_namespace(buf_task, task_list.ns, 0, -1)
+	vim.api.nvim_buf_add_highlight(buf_task, task_list.ns, "Comment", mid_point, 0, -1)
+
+	local logo = {
+		"        ██████╗ ██╗   ██╗██╗██╗     ██████╗          ",
+		"        ██╔══██╗██║   ██║██║██║     ██╔══██╗         ",
+		"        ██████╔╝██║   ██║██║██║     ██║  ██║         ",
+		"        ██╔══██╗██║   ██║██║██║     ██║  ██║         ",
+		"        ██████╔╝╚██████╔╝██║███████╗██████╔╝         ",
+		"         ╚═════╝  ╚═════╝ ╚═╝╚══════╝╚═════╝          ",
+		"                                                      ",
+		" ███████╗███████╗███╗   ██╗████████╗██████╗ ██╗   ██╗",
+		" ██╔════╝██╔════╝████╗  ██║╚══██╔══╝██╔══██╗╚██╗ ██╔╝",
+		" ███████╗█████╗  ██╔██╗ ██║   ██║   ██████╔╝ ╚████╔╝ ",
+		" ╚════██║██╔══╝  ██║╚██╗██║   ██║   ██╔══██╗  ╚██╔╝  ",
+		" ███████║███████╗██║ ╚████║   ██║   ██║  ██║   ██║   ",
+		" ╚══════╝╚══════╝╚═╝  ╚═══╝   ╚═╝   ╚═╝  ╚═╝   ╚═╝   ",
+	}
+
+	local dashboard_items = {
+		{ icon = "󰗼", desc = "Quit", key = "q" },
+	}
+
+	vim.api.nvim_buf_set_lines(buf_out, 0, -1, false, {})
+	vim.api.nvim_buf_clear_namespace(buf_out, task_list.ns, 0, -1)
+
+	local total_ui_height = #logo + #dashboard_items + 1
+	local start_row = math.max(0, math.floor((h_out - total_ui_height) / 2))
+
+	local logo_width = vim.fn.strdisplaywidth(logo[1])
+	local left_padding = math.max(0, math.floor((w_out - logo_width) / 2))
+	local padding_str = string.rep(" ", left_padding)
+
+	local final_out_lines = {}
+	for _ = 1, start_row do
+		table.insert(final_out_lines, "")
+	end
+	for _, line in ipairs(logo) do
+		table.insert(final_out_lines, padding_str .. line)
+	end
+	for _ = 1, #dashboard_items + 1 do
+		table.insert(final_out_lines, "")
+	end
+
+	vim.api.nvim_buf_set_lines(buf_out, 0, -1, false, final_out_lines)
+
+	for i = 0, #logo - 1 do
+		vim.api.nvim_buf_add_highlight(buf_out, task_list.ns, "Title", start_row + i, 0, -1)
+	end
+
+	local item_start_row = start_row + #logo + 1
+	for i, item in ipairs(dashboard_items) do
+		local row = item_start_row + i - 1
+
+		vim.api.nvim_buf_set_extmark(buf_out, task_list.ns, row, 0, {
+			virt_text = {
+				{ string.rep(" ", left_padding + 4), "" },
+				{ item.icon .. "  ", "DiagnosticInfo" },
+				{ item.desc, "" },
+				{ string.rep(" ", logo_width - #item.desc - 12), "" },
+				{ "[" .. item.key .. "]", "DiagnosticWarn" },
+			},
+			virt_text_pos = "overlay",
+		})
+	end
+
+	vim.api.nvim_win_set_buf(win_out, buf_out)
+	M.update_guide()
+end
+
 function M.update_guide()
 	local active_task = state.get_active_task()
 	local active_actions = {}
@@ -112,8 +214,12 @@ function M.open()
 end
 
 function M.refresh()
-	M.task_list.refresh()
-	M.update_guide()
+	if #state.tasks == 0 then
+		M.reset()
+	else
+		M.task_list.refresh()
+		M.update_guide()
+	end
 end
 
 return M
