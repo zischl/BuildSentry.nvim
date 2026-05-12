@@ -33,14 +33,12 @@ end
 
 function Task.new(name, cmd, cwd)
 	local bufnr = vim.api.nvim_create_buf(false, true)
-	local channel = vim.api.nvim_open_term(bufnr, {})
 
 	local self = setmetatable({
 		name = name,
 		cmd = cmd,
 		cwd = cwd or vim.fn.getcwd(),
 		bufnr = bufnr,
-		chan = channel,
 		status = "IDLE",
 		exit_code = nil,
 		job_id = nil,
@@ -66,8 +64,6 @@ function Task:start()
 			return
 		end
 
-		vim.api.nvim_chan_send(self.chan, table.concat(data, "\r\n"))
-
 		for i = #data, 1, -1 do
 			local line = data[i]:gsub("\27%[[0-9;?]*[a-zA-Z]", ""):gsub("\r", ""):gsub("%s+$", "")
 			if line ~= "" then
@@ -84,29 +80,31 @@ function Task:start()
 		end)
 	end
 
-	self.job_id = vim.fn.jobstart(self.cmd, {
-		cwd = self.cwd,
-		pty = true,
-		width = 500,
-		on_stdout = on_stdout,
-		on_stderr = on_stdout,
-		on_exit = function(_, code)
-			self.status = code == 0 and "SUCCESS" or "FAILED"
-			self.exit_code = code
+	local function on_exit(_, code)
+		self.status = code == 0 and "SUCCESS" or "FAILED"
+		self.exit_code = code
 
-			local summary, item = parse_error(self.output)
-			self.output = summary
-			self.error = item
+		local summary, item = parse_error(self.output)
+		self.output = summary
+		self.error = item
 
-			vim.schedule(function()
-				local ui_ok, ui = pcall(require, "buildsentry.ui")
-				if ui_ok then
-					ui.task_list.update(self)
-					ui.update_guide()
-				end
-			end)
-		end,
-	})
+		vim.schedule(function()
+			local ui_ok, ui = pcall(require, "buildsentry.ui")
+			if ui_ok then
+				ui.task_list.update(self)
+				ui.update_guide()
+			end
+		end)
+	end
+
+	vim.api.nvim_buf_call(self.bufnr, function()
+		self.job_id = vim.fn.termopen(self.cmd, {
+			cwd = self.cwd,
+			on_stdout = on_stdout,
+			on_stderr = on_stdout,
+			on_exit = on_exit,
+		})
+	end)
 
 	return self.job_id
 end
@@ -121,7 +119,21 @@ end
 
 function Task:restart()
 	self:stop()
-	vim.api.nvim_buf_set_lines(self.bufnr, 0, -1, false, {})
+
+	local old_buf = self.bufnr
+	local new_buf = vim.api.nvim_create_buf(false, true)
+	self.bufnr = new_buf
+
+	for _, win in pairs(state.windows) do
+		if win and vim.api.nvim_win_is_valid(win) and vim.api.nvim_win_get_buf(win) == old_buf then
+			vim.api.nvim_win_set_buf(win, new_buf)
+		end
+	end
+
+	if old_buf and vim.api.nvim_buf_is_valid(old_buf) then
+		vim.api.nvim_buf_delete(old_buf, { force = true })
+	end
+
 	self:start()
 end
 

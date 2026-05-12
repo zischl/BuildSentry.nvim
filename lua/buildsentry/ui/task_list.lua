@@ -206,14 +206,32 @@ function M.remove(task)
 	vim.api.nvim_buf_set_lines(buf, task_line, task_line + 1, false, {})
 	vim.api.nvim_buf_del_extmark(buf, M.ns, task.extmark_id)
 
+	local removed_idx = nil
 	for i, t in ipairs(state.tasks) do
 		if t == task then
+			removed_idx = i
 			table.remove(state.tasks, i)
 			break
 		end
 	end
 
-	M.refresh()
+	if removed_idx then
+		if state.active_task_index > #state.tasks then
+			state.active_task_index = math.max(1, #state.tasks)
+		end
+	end
+
+	if #state.tasks > 0 then
+		M.set_output()
+	else
+		require("buildsentry.ui").home()
+	end
+
+	if task.bufnr and vim.api.nvim_buf_is_valid(task.bufnr) then
+		vim.api.nvim_buf_delete(task.bufnr, { force = true })
+	end
+
+	require("buildsentry.ui").refresh()
 end
 
 function M.on_cursor_moved()

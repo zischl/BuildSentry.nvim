@@ -10,9 +10,19 @@ local group = vim.api.nvim_create_augroup("BuildSentryUI", { clear = true })
 
 function M.init()
 	state.task_ns = vim.api.nvim_create_namespace("task")
+	vim.api.nvim_create_autocmd("WinEnter", {
+		group = group,
+		callback = function()
+			local cur_win = vim.api.nvim_get_current_win()
+			if cur_win == state.windows.task or cur_win == state.windows.output then
+				M.update_guide()
+			end
+		end,
+	})
 end
 
 function M.close()
+	guide.cleanup()
 	if state.windows.task and vim.api.nvim_win_is_valid(state.windows.task) then
 		vim.api.nvim_win_close(state.windows.task, true)
 	end
@@ -135,24 +145,44 @@ function M.reset()
 end
 
 function M.update_guide()
-	local active_task = state.get_active_task()
-	local active_actions = {}
+	local win = vim.api.nvim_get_current_win()
+	local buf = vim.api.nvim_win_get_buf(win)
+	local action_sets = {}
 
-	local sets = { actions.global, actions.task_list }
-	for _, set in ipairs(sets) do
+	if win == state.windows.task then
+		action_sets = { actions.global, actions.task_list }
+	elseif win == state.windows.output then
+		action_sets = { actions.global, actions.output }
+	else
+		return
+	end
+
+	local all_actions = {}
+	for _, set in ipairs(action_sets) do
 		for _, action in ipairs(set) do
-			local is_active = action.enabled ~= false
-			if action.get_state then
-				is_active = action.get_state(active_task)
-			end
-
-			if is_active then
-				table.insert(active_actions, action)
-			end
+			table.insert(all_actions, action)
 		end
 	end
 
-	guide.set(active_actions)
+	guide.set(all_actions, buf)
+end
+
+function M.focus_output()
+	if state.windows.output and vim.api.nvim_win_is_valid(state.windows.output) then
+		vim.api.nvim_set_current_win(state.windows.output)
+		local buf = vim.api.nvim_win_get_buf(state.windows.output)
+		if vim.bo[buf].buftype == "terminal" then
+			vim.cmd("startinsert")
+		end
+		M.update_guide()
+	end
+end
+
+function M.focus_tasks()
+	if state.windows.task and vim.api.nvim_win_is_valid(state.windows.task) then
+		vim.api.nvim_set_current_win(state.windows.task)
+		M.update_guide()
+	end
 end
 
 function M.open()
