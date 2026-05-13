@@ -53,40 +53,47 @@ function M.set(actions, bufnr)
 end
 
 function M.generate_guide_format(actions, width)
-	local rows = {}
-	local row_highlights = {}
+	local lines = {}
+	local col_width = math.floor(width / 2)
 
-	local current_row_text = "  "
-	local current_row_hls = {}
+	for i = 1, #actions, 2 do
+		local line_virt = {}
+		local a1 = actions[i]
+		local a2 = actions[i + 1]
 
-	for _, a in ipairs(actions) do
-		local label = a.label
-		local key_part = label:match("^(.-):") or a.key
+		local function add_col(a)
+			local icon = a.icon or "󰄬"
+			local desc = a.desc or a.key
+			local key = "[" .. a.key .. "]"
 
-		if #current_row_text + #label + 3 > width and current_row_text ~= "  " then
-			table.insert(rows, current_row_text)
-			table.insert(row_highlights, current_row_hls)
-			current_row_text = "  "
-			current_row_hls = {}
+			local icon_part = icon .. "  "
+			table.insert(line_virt, { "  ", "" })
+			table.insert(line_virt, { icon_part, "DiagnosticInfo" })
+			table.insert(line_virt, { desc, "Normal" })
+
+			local used = 2 + vim.fn.strdisplaywidth(icon_part) + vim.fn.strdisplaywidth(desc)
+			local padding = col_width - used - vim.fn.strdisplaywidth(key) - 2
+			if padding > 0 then
+				table.insert(line_virt, { string.rep(" ", padding), "" })
+			end
+			table.insert(line_virt, { key, "DiagnosticWarn" })
+			table.insert(line_virt, { "  ", "" })
 		end
 
-		local start_col = #current_row_text
-		local key_end_col = start_col + #key_part
-
-		table.insert(current_row_hls, { start_col = start_col, end_col = key_end_col, group = "DiagnosticInfo" })
-
-		current_row_text = current_row_text .. label .. "   "
+		add_col(a1)
+		if a2 then
+			add_col(a2)
+		end
+		table.insert(lines, line_virt)
 	end
-	table.insert(rows, current_row_text)
-	table.insert(row_highlights, current_row_hls)
 
-	return rows, row_highlights
+	return lines
 end
 
 function M.render(actions)
 	local labels = {}
 	for _, a in ipairs(actions) do
-		table.insert(labels, a.label)
+		table.insert(labels, a.key .. (a.desc or ""))
 	end
 
 	local width = 40
@@ -101,16 +108,22 @@ function M.render(actions)
 	end
 	prev_hash = current_hash
 
-	local guide_map_lines, guide_map_hl = M.generate_guide_format(actions, width)
+	local guide_virt_lines = M.generate_guide_format(actions, width)
 
 	if state.buffers.guide and vim.api.nvim_buf_is_valid(state.buffers.guide) then
-		vim.api.nvim_buf_set_lines(state.buffers.guide, 0, -1, false, guide_map_lines)
+		local empty_lines = {}
+		for _ = 1, #guide_virt_lines do
+			table.insert(empty_lines, "")
+		end
+
+		vim.api.nvim_buf_set_lines(state.buffers.guide, 0, -1, false, empty_lines)
 		vim.api.nvim_buf_clear_namespace(state.buffers.guide, ns, 0, -1)
 
-		for i, hls in ipairs(guide_map_hl) do
-			for _, hl in ipairs(hls) do
-				vim.api.nvim_buf_add_highlight(state.buffers.guide, ns, hl.group, i - 1, hl.start_col, hl.end_col)
-			end
+		for i, virt_text in ipairs(guide_virt_lines) do
+			vim.api.nvim_buf_set_extmark(state.buffers.guide, ns, i - 1, 0, {
+				virt_text = virt_text,
+				virt_text_pos = "overlay",
+			})
 		end
 	end
 end

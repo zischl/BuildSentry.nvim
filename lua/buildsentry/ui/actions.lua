@@ -7,6 +7,7 @@ local state = require("buildsentry.state")
   {
     key = string,
     label = string,
+    icon = "󰗼",
     mode = string, (default "n")
     enabled = function(task) -> boolean, (optional)
     fn = function(task, idx) -- handler
@@ -16,7 +17,8 @@ local state = require("buildsentry.state")
 M.global = {
 	{
 		key = "q",
-		label = "q:quit",
+		icon = "󰗼",
+		desc = "Quit",
 		mode = "n",
 		fn = function()
 			require("buildsentry.ui").close()
@@ -24,7 +26,8 @@ M.global = {
 	},
 	{
 		key = "h",
-		label = "h:home",
+		icon = "󰋜",
+		desc = "Home",
 		mode = "n",
 		enabled = function()
 			local state = require("buildsentry.state")
@@ -43,7 +46,8 @@ M.global = {
 M.task_list = {
 	{
 		key = "x",
-		label = "x:kill",
+		icon = "󰅙",
+		desc = "Kill",
 		mode = "n",
 		enabled = function(task)
 			return task and task.status == "RUNNING"
@@ -54,7 +58,8 @@ M.task_list = {
 	},
 	{
 		key = "r",
-		label = "r:restart",
+		icon = "󰑐",
+		desc = "Restart",
 		mode = "n",
 		fn = function(_, idx)
 			executor.restart_task(idx)
@@ -62,7 +67,8 @@ M.task_list = {
 	},
 	{
 		key = "e",
-		label = "e:goto error",
+		icon = "󰅚",
+		desc = "Goto Err",
 		mode = "n",
 		enabled = function(task)
 			return task and task.error ~= nil
@@ -81,7 +87,8 @@ M.task_list = {
 	},
 	{
 		key = "d",
-		label = "d:delete",
+		icon = "󰆴",
+		desc = "Delete",
 		mode = "n",
 		fn = function(task)
 			if task then
@@ -93,7 +100,8 @@ M.task_list = {
 	},
 	{
 		key = "C",
-		label = "C:clear completed",
+		icon = "󰃢",
+		desc = "Clear",
 		mode = "n",
 		fn = function()
 			local state = require("buildsentry.state")
@@ -109,7 +117,8 @@ M.task_list = {
 	},
 	{
 		key = "c",
-		label = "c:copy cmd",
+		icon = "󰆏",
+		desc = "Copy CMD",
 		mode = "n",
 		fn = function(task)
 			if task and task.cmd then
@@ -120,7 +129,8 @@ M.task_list = {
 	},
 	{
 		key = "o",
-		label = "o:output",
+		icon = "󰆊",
+		desc = "Open",
 		mode = "n",
 		enabled = function()
 			local state = require("buildsentry.state")
@@ -136,7 +146,8 @@ M.task_list = {
 	},
 	{
 		key = "<Tab>",
-		label = "<Tab>:focus out",
+		icon = "󰔡",
+		desc = "Focus",
 		mode = "n",
 		enabled = function()
 			local state = require("buildsentry.state")
@@ -151,7 +162,8 @@ M.task_list = {
 M.output = {
 	{
 		key = "<S-Tab>",
-		label = "<S-Tab>:focus tasks",
+		icon = "󰔡",
+		desc = "Focus",
 		mode = "t",
 		enabled = function()
 			return vim.api.nvim_get_current_win() == state.windows.output
