@@ -41,6 +41,27 @@ M.global = {
 			require("buildsentry.ui").home()
 		end,
 	},
+	{
+		key = "a",
+		icon = "󰘳",
+		desc = "Actions",
+		mode = "n",
+		fn = function()
+			local cmake = require("buildsentry.adapter.cmake")
+			local all_actions = cmake.get_actions()
+
+			vim.ui.select(all_actions, {
+				prompt = "Select Action",
+				format_item = function(item)
+					return item.icon .. " " .. item.name
+				end,
+			}, function(choice)
+				if choice then
+					choice.fn()
+				end
+			end)
+		end,
+	},
 }
 
 M.task_list = {

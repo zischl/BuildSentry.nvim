@@ -62,6 +62,20 @@ function M.get_adapter()
 	}
 end
 
+function M.get_actions()
+	return {
+		{ name = "Build", icon = "󰑐", fn = function() vim.cmd("CMakeBuild") end },
+		{ name = "Run", icon = "󰆊", fn = function() vim.cmd("CMakeRun") end },
+		{ name = "Debug", icon = "󰅟", fn = function() vim.cmd("CMakeDebug") end },
+		{ name = "Generate", icon = "󰦨", fn = function() vim.cmd("CMakeGenerate") end },
+		{ name = "Clean", icon = "󰃢", fn = function() vim.cmd("CMakeClean") end },
+		{ name = "Select Target", icon = "󰗀", fn = function() vim.cmd("CMakeSelectBuildTarget") end },
+		{ name = "Select Build Preset", icon = "󰒓", fn = function() vim.cmd("CMakeSelectBuildPreset") end },
+		{ name = "Select Config Preset", icon = "󰒓", fn = function() vim.cmd("CMakeSelectConfigurePreset") end },
+		{ name = "Select Kit", icon = "󰘦", fn = function() vim.cmd("CMakeSelectKit") end },
+	}
+end
+
 function M.attach()
 	local ok_exec, executors = pcall(require, "cmake-tools.executors")
 	local ok_run, runners = pcall(require, "cmake-tools.runners")
