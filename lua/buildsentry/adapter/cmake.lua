@@ -64,15 +64,83 @@ end
 
 function M.get_actions()
 	return {
-		{ name = "Build", icon = "󰑐", fn = function() vim.cmd("CMakeBuild") end },
-		{ name = "Run", icon = "󰆊", fn = function() vim.cmd("CMakeRun") end },
-		{ name = "Debug", icon = "󰅟", fn = function() vim.cmd("CMakeDebug") end },
-		{ name = "Generate", icon = "󰦨", fn = function() vim.cmd("CMakeGenerate") end },
-		{ name = "Clean", icon = "󰃢", fn = function() vim.cmd("CMakeClean") end },
-		{ name = "Select Target", icon = "󰗀", fn = function() vim.cmd("CMakeSelectBuildTarget") end },
-		{ name = "Select Build Preset", icon = "󰒓", fn = function() vim.cmd("CMakeSelectBuildPreset") end },
-		{ name = "Select Config Preset", icon = "󰒓", fn = function() vim.cmd("CMakeSelectConfigurePreset") end },
-		{ name = "Select Kit", icon = "󰘦", fn = function() vim.cmd("CMakeSelectKit") end },
+		{
+			name = "Build",
+			icon = "󰑐",
+			fn = function()
+				vim.cmd("CMakeBuild")
+			end,
+		},
+		{
+			name = "Run",
+			icon = "󰆊",
+			fn = function()
+				vim.cmd("CMakeRun")
+			end,
+		},
+		{
+			name = "Debug",
+			icon = "󰅟",
+			fn = function()
+				vim.cmd("CMakeDebug")
+			end,
+		},
+		{
+			name = "Generate",
+			icon = "󰦨",
+			fn = function()
+				vim.cmd("CMakeGenerate")
+			end,
+		},
+		{
+			name = "Clean",
+			icon = "󰃢",
+			fn = function()
+				vim.cmd("CMakeClean")
+			end,
+		},
+		{
+			name = "Select Target",
+			icon = "󰗀",
+			fn = function()
+				vim.cmd("CMakeSelectBuildTarget")
+			end,
+		},
+		{
+			name = "Select Build Preset",
+			icon = "󰒓",
+			fn = function()
+				vim.cmd("CMakeSelectBuildPreset")
+			end,
+		},
+		{
+			name = "Select Config Preset",
+			icon = "󰒓",
+			fn = function()
+				vim.cmd("CMakeSelectConfigurePreset")
+			end,
+		},
+		{
+			name = "Select Build Type",
+			icon = "󰙨",
+			fn = function()
+				vim.cmd("CMakeSelectBuildType")
+			end,
+		},
+		{
+			name = "Edit Build Directory",
+			icon = "󰉖",
+			fn = function()
+				vim.cmd("CMakeSelectBuildDir")
+			end,
+		},
+		{
+			name = "Select Kit",
+			icon = "󰘦",
+			fn = function()
+				vim.cmd("CMakeSelectKit")
+			end,
+		},
 	}
 end
 

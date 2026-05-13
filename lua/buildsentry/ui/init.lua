@@ -65,6 +65,7 @@ function M.home()
 	}
 
 	local dashboard_items = {
+		{ icon = "󰘳", desc = "Actions", key = "a" },
 		{ icon = "󰗼", desc = "Quit", key = "q" },
 	}
 
