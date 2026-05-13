@@ -6,7 +6,25 @@ A Neovim plugin for managing and monitoring build/run tasks directly inside the 
 
 ---
 ## Demo
-<img width="1568" height="868" alt="Screenshot 2026-05-11 161403" src="https://github.com/user-attachments/assets/fc298cb0-b1ae-4aeb-9a9b-e22b18720a57" />
+<table style="width: 100%;">
+  <tr>
+    <td width="50%">
+      <img src="https://github.com/user-attachments/assets/3a5869a6-043e-4565-b126-9664b0e4f425" alt="Screenshot 1" style="width:100%;">
+    </td>
+    <td width="50%">
+      <img src="https://github.com/user-attachments/assets/56795d92-ec58-4445-94d6-c6b5c1e66a16" alt="Screenshot 2" style="width:100%;">
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <img src="https://github.com/user-attachments/assets/655e9c62-f22a-451e-81cc-8f2987f48bba" alt="Screenshot 3" style="width:100%;">
+    </td>
+    <td width="50%">
+      <img src="https://github.com/user-attachments/assets/6bb541bd-b54b-49de-8dd1-906205a6163a" alt="Screenshot 4" style="width:100%;">
+    </td>
+  </tr>
+</table>
+
 
 
 ## Features
