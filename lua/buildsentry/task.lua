@@ -81,12 +81,28 @@ function Task:start()
 	end
 
 	local function on_exit(_, code)
-		self.status = code == 0 and "SUCCESS" or "FAILED"
-		self.exit_code = code
+		if self._exited then
+			return
+		end
+		self._exited = true
+
+		local terminated_codes = { [130] = true, [131] = true, [143] = true, [-1073741510] = true }
 
 		local summary, item = parse_error(self.output)
 		self.output = summary
 		self.error = item
+
+		if self.status ~= "TERMINATED" then
+			local terminated = terminated_codes[code] or (self.output and self.output:match("%^C"))
+
+			if terminated then
+				self.status = "TERMINATED"
+			else
+				self.status = code == 0 and "SUCCESS" or "FAILED"
+			end
+		end
+		self.exit_code = code
+		self.job_id = nil
 
 		vim.schedule(function()
 			local ui_ok, ui = pcall(require, "buildsentry.ui")
@@ -106,14 +122,22 @@ function Task:start()
 		})
 	end)
 
+	vim.api.nvim_create_autocmd("TermClose", {
+		buffer = self.bufnr,
+		once = true,
+		callback = function()
+			on_exit(nil, vim.v.event.status)
+		end,
+	})
+
 	return self.job_id
 end
 
 function Task:stop()
 	if self.job_id then
+		self.status = "TERMINATED"
 		vim.fn.jobstop(self.job_id)
 		self.job_id = nil
-		self.status = "TERMINATED"
 	end
 end
 
