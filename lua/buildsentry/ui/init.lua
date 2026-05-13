@@ -187,14 +187,6 @@ function M.open()
 	if not state.buffers.task or not vim.api.nvim_buf_is_valid(state.buffers.task) then
 		state.buffers.task = vim.api.nvim_create_buf(false, true)
 		vim.api.nvim_buf_set_name(state.buffers.task, "BuildSentry Tasks")
-
-		vim.api.nvim_create_autocmd("CursorMoved", {
-			group = group,
-			buffer = state.buffers.task,
-			callback = function()
-				M.task_list.on_cursor_moved()
-			end,
-		})
 	end
 
 	if not state.buffers.output or not vim.api.nvim_buf_is_valid(state.buffers.output) then
@@ -251,6 +243,14 @@ function M.open()
 			if cur_win == state.windows.task or cur_win == state.windows.output then
 				M.update_guide()
 			end
+		end,
+	})
+
+	vim.api.nvim_create_autocmd("CursorMoved", {
+		group = group,
+		buffer = state.buffers.task,
+		callback = function()
+			M.task_list.on_cursor_moved()
 		end,
 	})
 
