@@ -171,7 +171,6 @@ M.task_list = {
 		desc = "Focus",
 		mode = "n",
 		enabled = function()
-			local state = require("buildsentry.state")
 			return vim.api.nvim_get_current_win() == state.windows.task
 		end,
 		fn = function()
@@ -182,9 +181,22 @@ M.task_list = {
 
 M.output = {
 	{
+		key = "<Tab>",
+		icon = "󰔡",
+		desc = "Focus (n)",
+		mode = "n",
+		enabled = function()
+			return vim.api.nvim_get_current_win() == state.windows.output
+		end,
+		fn = function()
+			require("buildsentry.ui").focus_tasks()
+		end,
+	},
+
+	{
 		key = "<S-Tab>",
 		icon = "󰔡",
-		desc = "Focus",
+		desc = "Focus (t)",
 		mode = "t",
 		enabled = function()
 			return vim.api.nvim_get_current_win() == state.windows.output

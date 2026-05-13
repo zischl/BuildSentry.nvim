@@ -105,6 +105,11 @@ function Task:start()
 		self.job_id = nil
 
 		vim.schedule(function()
+			local active_buf = vim.api.nvim_get_current_buf()
+			if active_buf == self.bufnr and vim.api.nvim_get_mode().mode == "t" then
+				vim.cmd("stopinsert")
+			end
+
 			local ui_ok, ui = pcall(require, "buildsentry.ui")
 			if ui_ok then
 				ui.task_list.update(self)

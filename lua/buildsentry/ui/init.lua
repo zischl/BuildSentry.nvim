@@ -10,19 +10,11 @@ local group = vim.api.nvim_create_augroup("BuildSentryUI", { clear = true })
 
 function M.init()
 	state.task_ns = vim.api.nvim_create_namespace("task")
-	vim.api.nvim_create_autocmd("WinEnter", {
-		group = group,
-		callback = function()
-			local cur_win = vim.api.nvim_get_current_win()
-			if cur_win == state.windows.task or cur_win == state.windows.output then
-				M.update_guide()
-			end
-		end,
-	})
 end
 
 function M.close()
 	guide.cleanup()
+	vim.api.nvim_clear_autocmds({ group = group })
 	if state.windows.task and vim.api.nvim_win_is_valid(state.windows.task) then
 		vim.api.nvim_win_close(state.windows.task, true)
 	end
@@ -173,7 +165,10 @@ function M.focus_output()
 		vim.api.nvim_set_current_win(state.windows.output)
 		local buf = vim.api.nvim_win_get_buf(state.windows.output)
 		if vim.bo[buf].buftype == "terminal" then
-			vim.cmd("startinsert")
+			local task = state.get_active_task()
+			if task and task.bufnr == buf and task:is_alive() then
+				vim.cmd("startinsert")
+			end
 		end
 		M.update_guide()
 	end
@@ -248,6 +243,40 @@ function M.open()
 	})
 
 	M.refresh()
+
+	vim.api.nvim_create_autocmd("WinEnter", {
+		group = group,
+		callback = function()
+			local cur_win = vim.api.nvim_get_current_win()
+			if cur_win == state.windows.task or cur_win == state.windows.output then
+				M.update_guide()
+			end
+		end,
+	})
+
+	vim.api.nvim_create_autocmd("TermEnter", {
+		group = group,
+		callback = function()
+			if vim.api.nvim_get_current_win() == state.windows.output then
+				local task = state.get_active_task()
+				if task and not task:is_alive() then
+					vim.cmd("stopinsert")
+				end
+			end
+		end,
+	})
+
+	for _, win in pairs({ state.windows.task, state.windows.output }) do
+		if win and vim.api.nvim_win_is_valid(win) then
+			vim.api.nvim_create_autocmd("WinClosed", {
+				pattern = tostring(win),
+				callback = function()
+					M.close()
+				end,
+				once = true,
+			})
+		end
+	end
 end
 
 function M.refresh()
