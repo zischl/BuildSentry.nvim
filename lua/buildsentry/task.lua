@@ -87,24 +87,51 @@ function Task:start()
 		self._exited = true
 
 		local terminated_codes = { [130] = true, [131] = true, [143] = true, [-1073741510] = true }
-
-		local summary, item = parse_error(self.output)
-		self.output = summary
-		self.error = item
-
-		if self.status ~= "TERMINATED" then
-			local terminated = terminated_codes[code] or (self.output and self.output:match("%^C"))
-
-			if terminated then
-				self.status = "TERMINATED"
-			else
-				self.status = code == 0 and "SUCCESS" or "FAILED"
-			end
-		end
-		self.exit_code = code
-		self.job_id = nil
+		local stream_output = self.output
 
 		vim.schedule(function()
+			local last_line = stream_output
+			local fallback_line = stream_output
+			if self.bufnr and vim.api.nvim_buf_is_valid(self.bufnr) then
+				local line_count = vim.api.nvim_buf_line_count(self.bufnr)
+				local found = false
+				for i = line_count, 1, -1 do
+					local line = vim.api.nvim_buf_get_lines(self.bufnr, i - 1, i, false)[1] or ""
+					line = line:gsub("\27%[[0-9;?]*[a-zA-Z]", ""):gsub("\r", ""):gsub("%s+$", "")
+					if line ~= "" then
+						if fallback_line == stream_output then
+							fallback_line = line
+						end
+						local qf = vim.fn.getqflist({ lines = { line } })
+						local qf_item = qf.items and qf.items[1]
+						if qf_item and qf_item.valid == 1 then
+							last_line = line
+							found = true
+							break
+						end
+					end
+				end
+				if not found then
+					last_line = fallback_line
+				end
+			end
+
+			local summary, item = parse_error(last_line)
+			self.output = summary
+			self.error = item
+
+			if self.status ~= "TERMINATED" then
+				local terminated = terminated_codes[code] or (self.output and self.output:match("%^C"))
+
+				if terminated then
+					self.status = "TERMINATED"
+				else
+					self.status = code == 0 and "SUCCESS" or "FAILED"
+				end
+			end
+			self.exit_code = code
+			self.job_id = nil
+
 			local active_buf = vim.api.nvim_get_current_buf()
 			if active_buf == self.bufnr and vim.api.nvim_get_mode().mode == "t" then
 				vim.cmd("stopinsert")
