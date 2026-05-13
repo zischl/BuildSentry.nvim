@@ -29,13 +29,16 @@ A Neovim plugin for managing and monitoring build/run tasks directly inside the 
 
 ## Features
 
-- **Floating UI** — a centred panel with three panes: task list, live output, and a context-sensitive key guide.
+- **Floating UI** — a centred panel with three panes: task list, live output, and a context-sensitive dashboard guide.
+- **Dashboard Guide** — A new 2-column UI that dynamically shows available actions and their keybindings based on the current context.
 - **Live task list** — newest task appears at the top; each entry shows status icon, status label, task name, and the last output line as a virtual line.
+- **Interactive Terminal** — Full support for terminal input. Focus the output pane to interact with your running tasks (e.g., for TUI applications or interactive scripts).
+- **Focus Toggling** — Seamlessly switch focus between the Task List and the Terminal Output using `<Tab>` and `<S-Tab>`.
 - **Colour-coded status** — `RUNNING` (info), `SUCCESS` (ok), `FAILED` (error), `TERMINATED` (warning), using your theme's diagnostic colours.
-- **Real-time output streaming** — PTY-backed job output is piped directly into a terminal buffer and updated incrementally.
+- **Real-time output** — Integrated terminal output allowing for native terminal behavior and incremental updates.
 - **Error jump** — when a build fails, press `e` to close the UI and jump straight to the offending file/line.
-- **Restart / Kill** — restart or kill any task without leaving the UI.
-- **cmake-tools adapter** — registers itself as both the `executor` and `runner` backend for cmake-tools so all CMake configure, build, and run commands flow through BuildSentry automatically.
+- **Adapter Actions** — Access adapter-specific commands (like CMake Build, Run, Debug) directly from within the UI via a dynamic actions picker.
+- **cmake-tools adapter** — Registers itself as both the `executor` and `runner` backend for cmake-tools so all CMake configure, build, and run commands flow through BuildSentry automatically.
 
 ---
 
@@ -115,24 +118,56 @@ require("buildsentry").open()
 
 ## UI Key Bindings
 
+The UI is divided into context-aware panes. The **Dashboard Guide** at the bottom updates its list of shortcuts based on which pane you are currently focusing.
+
+### Tasks Pane Bindings
+
 These bindings are active while the **Tasks** pane is focused:
 
 | Key | Action |
 |-----|--------|
 | `q` | Close the BuildSentry UI |
+| `h` | Return to the Home Dashboard |
+| `a` | Open the **Actions** picker (adapter-specific commands) |
 | `r` | Restart the selected task |
 | `x` | Kill (terminate) the selected task |
 | `e` | Jump to the error location *(shown only when the task has a recorded error)* |
+| `d` | Delete the selected task from the registry |
+| `C` | Clear all completed tasks |
+| `c` | Copy the full command of the selected task to the clipboard |
+| `o` | Open the output buffer for the selected task |
+| `<Tab>` | Focus the **Output** pane |
 
-Navigate the task list with standard Neovim cursor movement (`j` / `k` / `up arrow` / `down arrow`). The output pane and the key guide update automatically as you move between tasks.
+Navigate the task list with standard Neovim cursor movement (`j` / `k` / `up arrow` / `down arrow`).
+
+### Output Pane Bindings
+
+These bindings are active while the **Output** (Terminal) pane is focused:
+
+| Key | Action |
+|-----|--------|
+| `<S-Tab>` | Focus back to the **Tasks** pane |
+
+*Note: In the Output pane, standard terminal interaction is enabled. Use `<S-Tab>` to return to task navigation.*
 
 ---
 
 ## cmake-tools Integration
 
-When `attach_cmake_tools = true`, BuildSentry registers itself as the `buildsentry` executor and runner inside cmake-tools. Once both are set, all cmake-tools commands — **CMake Configure**, **CMake Build**, **CMake Run** — will open BuildSentry automatically.
+When `attach_cmake_tools = true`, BuildSentry registers itself as the default `buildsentry` executor and runner inside cmake-tools. All cmake-tools commands **CMake Configure**, **CMake Build**, **CMake Run** will open BuildSentry automatically.
 
-Task names are inferred from the command:
+### Adapter Actions
+
+By pressing `a` in the Tasks pane, you can access common CMake commands without leaving the BuildSentry UI:
+- **Build** / **Run** / **Debug**
+- **Generate** / **Clean**
+- **Select Target** / **Select Kit**
+- **Select Build Type** / **Select Build/Config Preset**
+- **Select Build Type** and **Edit Build Directory**
+
+### Task Naming
+
+Task names are automatically inferred:
 
 | cmake-tools command | BuildSentry task name |
 |---------------------|-----------------------|
@@ -144,31 +179,7 @@ Task names are inferred from the command:
 
 ---
 
-## Architecture
 
-```
-plugin/
-  BuildSentry.lua          -- registers :BuildSentry user commands
-
-lua/buildsentry/
-  init.lua                 -- public API (setup / open / exec)
-  config.lua               -- option defaults & merging
-  state.lua                -- shared runtime state (tasks, windows, buffers)
-  task.lua                 -- Task class (lifecycle, PTY streaming, error parsing)
-  executor.lua             -- exec / stop_task / restart_task helpers
-
-  adapter/
-    cmake.lua              -- cmake-tools executor/runner adapter
-
-  ui/
-    init.lua               -- UI orchestrator (open / close / refresh)
-    window.lua             -- float creation & layout calculation
-    task_list.lua          -- incremental task list rendering via extmarks
-    guide.lua              -- context-sensitive key guide pane
-    actions.lua            -- action registry (keybindings & callbacks)
-```
-
----
 
 ## Task Statuses
 
@@ -184,3 +195,4 @@ lua/buildsentry/
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
