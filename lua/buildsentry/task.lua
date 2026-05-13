@@ -152,11 +152,12 @@ function Task:restart()
 	local old_buf = self.bufnr
 	local new_buf = vim.api.nvim_create_buf(false, true)
 	self.bufnr = new_buf
+	self._exited = false
 
-	for _, win in pairs(state.windows) do
-		if win and vim.api.nvim_win_is_valid(win) and vim.api.nvim_win_get_buf(win) == old_buf then
-			vim.api.nvim_win_set_buf(win, new_buf)
-		end
+	local state = require("buildsentry.state")
+	local win = state.windows.output
+	if win and vim.api.nvim_win_is_valid(win) and vim.api.nvim_win_get_buf(win) == old_buf then
+		vim.api.nvim_win_set_buf(win, new_buf)
 	end
 
 	if old_buf and vim.api.nvim_buf_is_valid(old_buf) then
