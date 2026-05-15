@@ -11,6 +11,7 @@ local M = {}
 ---@field exit_code number|nil
 ---@field output string
 ---@field error table|nil
+---@field diagnostics table
 ---@field extmark_id number|nil
 local Task = {}
 Task.__index = Task
@@ -44,6 +45,11 @@ function Task.new(name, cmd, cwd)
 		job_id = nil,
 		output = "",
 		error = nil,
+		diagnostics = {
+			items = {},
+			errors = 0,
+			warnings = 0,
+		},
 		extmark_id = nil,
 	}, Task)
 
@@ -55,7 +61,7 @@ function Task:start()
 		self:stop()
 	end
 
-	self.status = "RUNNING"
+	self.status = "RUN"
 	self.exit_code = nil
 	self.error = nil
 
@@ -64,11 +70,22 @@ function Task:start()
 			return
 		end
 
-		for i = #data, 1, -1 do
-			local line = data[i]:gsub("\27%[[0-9;?]*[a-zA-Z]", ""):gsub("\r", ""):gsub("%s+$", "")
+		for _, raw_line in ipairs(data) do
+			local line = raw_line:gsub("\27%[[0-9;?]*[a-zA-Z]", ""):gsub("\r", ""):gsub("%s+$", "")
 			if line ~= "" then
+				if line:match(":") then
+					local _, item = parse_error(line)
+					if item and item.valid == 1 then
+						table.insert(self.diagnostics.items, item)
+						if item.type == "W" then
+							self.diagnostics.warnings = self.diagnostics.warnings + 1
+						else
+							self.diagnostics.errors = self.diagnostics.errors + 1
+						end
+						self.error = item
+					end
+				end
 				self.output = line
-				break
 			end
 		end
 
@@ -90,43 +107,50 @@ function Task:start()
 		local stream_output = self.output
 
 		vim.schedule(function()
-			local last_line = stream_output
 			local fallback_line = stream_output
+			local buffer_error_item = nil
+
 			if self.bufnr and vim.api.nvim_buf_is_valid(self.bufnr) then
 				local line_count = vim.api.nvim_buf_line_count(self.bufnr)
-				local found = false
-				for i = line_count, 1, -1 do
-					local line = vim.api.nvim_buf_get_lines(self.bufnr, i - 1, i, false)[1] or ""
-					line = line:gsub("\27%[[0-9;?]*[a-zA-Z]", ""):gsub("\r", ""):gsub("%s+$", "")
-					if line ~= "" then
-						if fallback_line == stream_output then
-							fallback_line = line
-						end
-						local qf = vim.fn.getqflist({ lines = { line } })
-						local qf_item = qf.items and qf.items[1]
-						if qf_item and qf_item.valid == 1 then
-							last_line = line
-							found = true
+				local start_line = math.max(0, line_count - 100)
+				local lines = vim.api.nvim_buf_get_lines(self.bufnr, start_line, line_count, false)
+
+				local qf = vim.fn.getqflist({ lines = lines })
+				if qf.items and #qf.items > 0 then
+					for i = #qf.items, 1, -1 do
+						local item = qf.items[i]
+						if item.valid == 1 and item.lnum > 0 then
+							buffer_error_item = item
 							break
 						end
 					end
 				end
-				if not found then
-					last_line = fallback_line
-				end
 			end
 
-			local summary, item = parse_error(last_line)
-			self.output = summary
-			self.error = item
+			local summary, item
+			if buffer_error_item then
+				local type_label = (buffer_error_item.type == "W" and "Warning" or "Error")
+				local location = ""
+				if buffer_error_item.lnum > 0 then
+					location = string.format("[%d:%d] ", buffer_error_item.lnum, buffer_error_item.col)
+				end
+				summary = string.format("%s: %s%s", type_label, location, buffer_error_item.text)
+				item = buffer_error_item
+			else
+				summary, item = parse_error(fallback_line)
+			end
 
-			if self.status ~= "TERMINATED" then
+			self.output = summary ~= "" and summary or self.output
+
+			self.error = item or self.diagnostics.items[#self.diagnostics.items]
+
+			if self.status ~= "TRM" then
 				local terminated = terminated_codes[code] or (self.output and self.output:match("%^C"))
 
 				if terminated then
-					self.status = "TERMINATED"
+					self.status = "TRM"
 				else
-					self.status = code == 0 and "SUCCESS" or "FAILED"
+					self.status = code == 0 and "OK" or "FAIL"
 				end
 			end
 			self.exit_code = code
@@ -167,7 +191,7 @@ end
 
 function Task:stop()
 	if self.job_id then
-		self.status = "TERMINATED"
+		self.status = "TRM"
 		vim.fn.jobstop(self.job_id)
 		self.job_id = nil
 	end
@@ -195,7 +219,7 @@ function Task:restart()
 end
 
 function Task:is_alive()
-	return self.job_id ~= nil and self.status == "RUNNING"
+	return self.job_id ~= nil and self.status == "RUN"
 end
 
 function M.new(name, cmd, cwd)

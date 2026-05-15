@@ -8,48 +8,84 @@ function M.generate_task_format(task, selected)
 
 	local status_icon = ""
 	local status_hl = "DiagnosticInfo"
-	if task.status == "SUCCESS" then
+	if task.status == "OK" then
 		status_icon = ""
 		status_hl = "DiagnosticOk"
-	elseif task.status == "FAILED" then
+	elseif task.status == "FAIL" then
 		status_icon = ""
 		status_hl = "DiagnosticError"
-	elseif task.status == "TERMINATED" then
+	elseif task.status == "TRM" then
 		status_icon = ""
 		status_hl = "DiagnosticWarn"
 	end
 
-	local line1 = string.format(" %s %s %s Task: %s", selector, status_icon, task.status, task.name)
+	local window = state.windows.task
+	local width = 50
+	if window and vim.api.nvim_win_is_valid(window) then
+		width = vim.api.nvim_win_get_width(window)
+	end
+
+	local padded_status = task.status .. string.rep(" ", 4 - #task.status)
+	local status_part = string.format(" %s %s %s", selector, status_icon, padded_status)
+	local diag_part = string.format(" 󰅚 %d 󰀪 %d ", task.diagnostics.errors, task.diagnostics.warnings)
+	local name_part = " " .. task.name
+
+	local status_w = vim.fn.strdisplaywidth(status_part)
+	local diag_w = vim.fn.strdisplaywidth(diag_part)
+	local name_w = vim.fn.strdisplaywidth(name_part)
+
+	local available_for_name = width - status_w - diag_w
+	if name_w > available_for_name then
+		local truncated_name = vim.fn.strpart(task.name, 0, math.max(0, available_for_name - 4))
+		name_part = " " .. truncated_name .. "..."
+		name_w = vim.fn.strdisplaywidth(name_part)
+	end
+
+	local padding_len = math.max(0, width - status_w - name_w - diag_w)
+	local padding = string.rep(" ", padding_len)
+
+	local line1 = status_part .. name_part .. padding .. diag_part
+
+	local status_start = 1 + #selector + 1
+	local status_end = #status_part
+
+	local name_start = status_end
+	local name_end = status_end + #name_part
+
+	local diag_start = name_end + #padding
+	local diag_end = #line1
+
+	local err_icon_pos = diag_part:find("󰅚")
+	local warn_icon_pos = diag_part:find("󰀪")
+
+	local err_icon_start = diag_start + err_icon_pos - 1
+	local warn_icon_start = diag_start + warn_icon_pos - 1
+
+	local highlights = {
+		{ group = status_hl, start_col = status_start, end_col = status_end },
+		{ group = "Title", start_col = name_start, end_col = name_end },
+		{ group = "Comment", start_col = diag_start, end_col = diag_end },
+		{ group = "DiagnosticError", start_col = err_icon_start, end_col = err_icon_start + #"󰅚" },
+		{ group = "DiagnosticWarn", start_col = warn_icon_start, end_col = warn_icon_start + #"󰀪" },
+	}
 
 	local prefix = "  out: "
 	local prefix_width = vim.fn.strdisplaywidth(prefix)
 	local line2 = task.output:gsub("\27%[[0-9;?]*[a-zA-Z]", ""):gsub("^%s+", "")
 
-	local window = state.windows.task
-	local padding = 0
+	local virt_padding = 0
 	if window and vim.api.nvim_win_is_valid(window) then
-		local width = vim.api.nvim_win_get_width(window)
 		local available_width = width - prefix_width
 		local line2_width = vim.fn.strdisplaywidth(line2)
-		padding = available_width - line2_width
-		if padding < 0 then
+		virt_padding = available_width - line2_width
+		if virt_padding < 0 then
 			line2 = vim.fn.strpart(line2, 0, available_width - 3) .. "..."
-			padding = 0
+			virt_padding = 0
 		end
 	end
 
-	local status_start = 1 + #selector + 1
-	local status_end = status_start + #status_icon + 1 + #task.status
-	local name_start = status_end + 7
-
-	local highlights = {
-		{ group = status_hl, start_col = status_start, end_col = status_end },
-		{ group = "Comment", start_col = status_end, end_col = name_start },
-		{ group = "Title", start_col = name_start, end_col = -1 },
-	}
-
 	local virt_lines = {}
-	local padding_str = padding > 0 and string.rep(" ", padding) or ""
+	local padding_str = virt_padding > 0 and string.rep(" ", virt_padding) or ""
 
 	if selected then
 		virt_lines = { { { prefix, "Visual" }, { line2, "Visual" }, { padding_str, "Visual" } } }

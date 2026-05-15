@@ -71,7 +71,9 @@ M.task_list = {
 		desc = "Kill",
 		mode = "n",
 		enabled = function(task)
-			return task and task.status == "RUNNING"
+			if task then
+				return task:is_alive()
+			end
 		end,
 		fn = function(_, idx)
 			executor.stop_task(idx)
@@ -129,7 +131,7 @@ M.task_list = {
 			local task_list = require("buildsentry.ui.task_list")
 			for i = #state.tasks, 1, -1 do
 				local t = state.tasks[i]
-				if t.status ~= "RUNNING" then
+				if t:is_alive() then
 					task_list.remove(t)
 				end
 			end
