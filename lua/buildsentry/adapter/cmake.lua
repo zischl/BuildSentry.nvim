@@ -1,5 +1,4 @@
 local M = {}
-local selected_generator = "Ninja"
 
 function M.generate_task_name(cmd, args, opts)
 	if opts.title and opts.title ~= "" then
@@ -266,6 +265,113 @@ local function scan_generators()
 	return generators
 end
 
+local function get_kit_info()
+	local ok, cmake_tools = pcall(require, "cmake-tools")
+	if not ok then
+		return nil
+	end
+	local kit = cmake_tools.get_kit()
+	if not kit then
+		return nil
+	end
+
+	local info = {
+		generator = kit.generator,
+		compiler = "Unknown",
+	}
+
+	if kit.compilers then
+		if kit.compilers.C then
+			info.compiler = vim.fn.fnamemodify(kit.compilers.C, ":t")
+		elseif kit.compilers.CXX then
+			info.compiler = vim.fn.fnamemodify(kit.compilers.CXX, ":t")
+		end
+	end
+
+	return info
+end
+
+local function get_preset_info()
+	local ok, cmake_tools = pcall(require, "cmake-tools")
+	if not ok then
+		return nil
+	end
+	local preset = cmake_tools.get_configure_preset()
+	if not preset then
+		return nil
+	end
+
+	return {
+		generator = preset.generator,
+		compiler = preset.cacheVariables
+				and (preset.cacheVariables.CMAKE_C_COMPILER or preset.cacheVariables.CMAKE_CXX_COMPILER)
+				and vim.fn.fnamemodify(
+					preset.cacheVariables.CMAKE_C_COMPILER or preset.cacheVariables.CMAKE_CXX_COMPILER,
+					":t"
+				)
+			or "Preset Default",
+	}
+end
+
+local function get_default_generator()
+	local output = vim.fn.system("cmake --help")
+	for line in output:gmatch("[^\r\n]+") do
+		local gen = line:match("^%*%s+([^=]+)%s+=")
+		if gen then
+			return gen:gsub("%s+$", "")
+		end
+	end
+	return "Ninja"
+end
+
+local function get_active_generator()
+	local ok, cmake_tools = pcall(require, "cmake-tools")
+	if not ok then
+		return get_default_generator()
+	end
+
+	local config = cmake_tools.get_config()
+	if config.use_preset then
+		local info = get_preset_info()
+		if info and info.generator then
+			return info.generator
+		end
+	else
+		local info = get_kit_info()
+		if info and info.generator then
+			return info.generator
+		end
+	end
+
+	if config.generator then
+		return config.generator
+	end
+
+	return get_default_generator()
+end
+
+local function get_active_compiler()
+	local ok, cmake_tools = pcall(require, "cmake-tools")
+	if not ok then
+		return "Auto by CMake"
+	end
+
+	local config = cmake_tools.get_config()
+	if config.use_preset then
+		local info = get_preset_info()
+		if info and info.compiler then
+			return info.compiler
+		end
+	else
+		local info = get_kit_info()
+		if info and info.compiler then
+			return info.compiler
+		end
+	end
+
+	return "Auto by CMake"
+end
+
 local function generate_preset(compiler)
 	local cmake_tools = require("cmake-tools")
 	local config = cmake_tools.get_config()
@@ -289,7 +395,7 @@ local function generate_preset(compiler)
 	local preset_entry = {
 		name = preset_name,
 		displayName = compiler.name,
-		generator = selected_generator,
+		generator = get_active_generator(),
 		binaryDir = "${sourceDir}/build/" .. preset_name,
 		cacheVariables = {
 			CMAKE_C_COMPILER = compiler.path,
@@ -405,7 +511,7 @@ function M.get_config()
 					label = "Select Generator",
 					icon = "󰦨",
 					value = function()
-						return selected_generator
+						return get_active_generator()
 					end,
 					fn = function()
 						local generators = scan_generators()
@@ -414,7 +520,10 @@ function M.get_config()
 							table.insert(items, {
 								label = g,
 								fn = function()
-									selected_generator = g
+									if ok then
+										local config = cmake_tools.get_config()
+										config.generator = g
+									end
 								end,
 							})
 						end
@@ -428,7 +537,9 @@ function M.get_config()
 				{
 					label = "Select Compiler",
 					icon = "󰘦",
-					value = "Auto",
+					value = function()
+						return get_active_compiler()
+					end,
 					fn = function()
 						local compilers = scan_compilers()
 
