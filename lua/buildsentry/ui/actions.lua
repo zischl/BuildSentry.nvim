@@ -138,7 +138,7 @@ M.task_list = {
 			local task_list = require("buildsentry.ui.task_list")
 			for i = #state.tasks, 1, -1 do
 				local t = state.tasks[i]
-				if t:is_alive() then
+				if not t:is_alive() then
 					task_list.remove(t)
 				end
 			end
