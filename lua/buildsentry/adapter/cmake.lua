@@ -167,4 +167,109 @@ function M.attach()
 	end
 end
 
+function M.get_config()
+	local ok, cmake_tools = pcall(require, "cmake-tools")
+	local fetch = function(key)
+		if not ok then
+			return "Unknown"
+		end
+		local config = cmake_tools.get_config()
+		return config[key] or "None"
+	end
+
+	local function set_build_type(t)
+		vim.cmd("CMakeSelectBuildType " .. t)
+		return M.get_config()
+	end
+
+	return {
+		title = "CMake Configuration",
+		desc = "Manage your CMake build settings and presets.",
+		items = {
+			{
+				{
+					label = "Build Type",
+					icon = "󰙨",
+					value = function()
+						return fetch("build_type")
+					end,
+					fn = function()
+						return {
+							title = "Select Build Type",
+							desc = "Choose a CMake build configuration.",
+							items = {
+								{
+									{
+										label = "Debug",
+										fn = function() end,
+									},
+									{
+										label = "Release",
+										fn = function() end,
+									},
+									{
+										label = "RelWithDebInfo",
+										fn = function() end,
+									},
+									{
+										label = "MinSizeRel",
+										fn = function() end,
+									},
+								},
+							},
+						}
+					end,
+				},
+				{
+					label = "Select Kit",
+					icon = "󰘦",
+					value = function()
+						return fetch("kit")
+					end,
+					fn = function() end,
+				},
+				{
+					label = "Config Preset",
+					icon = "󰒓",
+					value = function()
+						return fetch("configure_preset")
+					end,
+					fn = function() end,
+				},
+				{
+					label = "Build Preset",
+					icon = "󰒓",
+					value = function()
+						return fetch("build_preset")
+					end,
+					fn = function() end,
+				},
+				{
+					label = "Build Directory",
+					icon = "󰉖",
+					value = function()
+						return fetch("build_directory")
+					end,
+					fn = function()
+						vim.cmd("CMakeSelectBuildDir")
+					end,
+				},
+				{
+					label = "Select Compiler",
+					icon = "󰘦",
+					value = "None",
+					fn = function() end,
+				},
+			},
+		},
+		keymaps = {
+			{
+				key = "s",
+				label = "Save",
+				fn = function() end,
+			},
+		},
+	}
+end
+
 return M
