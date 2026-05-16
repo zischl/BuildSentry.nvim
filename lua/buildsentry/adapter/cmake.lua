@@ -1,4 +1,5 @@
 local M = {}
+local selected_generator = "Ninja"
 
 function M.generate_task_name(cmd, args, opts)
 	if opts.title and opts.title ~= "" then
@@ -167,6 +168,152 @@ function M.attach()
 	end
 end
 
+local function scan_compilers()
+	local compilers = {}
+
+	if vim.fn.executable("gcc") == 1 then
+		local path = vim.fn.exepath("gcc")
+		local gxx = vim.fn.exepath("g++")
+		if gxx == "" then
+			gxx = path
+		end
+		table.insert(compilers, {
+			name = "GCC (Detected)",
+			path = path,
+			cxx_path = gxx,
+			type = "gcc",
+		})
+	end
+
+	if vim.fn.executable("clang") == 1 then
+		local path = vim.fn.exepath("clang")
+		local clangxx = vim.fn.exepath("clang++")
+		if clangxx == "" then
+			clangxx = path
+		end
+		table.insert(compilers, {
+			name = "Clang (Detected)",
+			path = path,
+			cxx_path = clangxx,
+			type = "clang",
+		})
+	end
+
+	if vim.fn.has("win32") == 1 then
+		local vswhere = "C:\\Program Files (x86)\\Microsoft Visual Studio\\Installer\\vswhere.exe"
+		if vim.fn.executable(vswhere) == 1 then
+			local output = vim.fn.system({ vswhere, "-products", "*", "-property", "installationPath" })
+			for install_path in output:gmatch("[^\r\n]+") do
+				local msvc_tools_path = install_path .. "\\VC\\Tools\\MSVC\\"
+				local versions = vim.fn.glob(msvc_tools_path .. "*", false, true)
+				for _, v_path in ipairs(versions) do
+					local cl_x64 = v_path .. "\\bin\\Hostx64\\x64\\cl.exe"
+					if vim.fn.executable(cl_x64) == 1 then
+						local version = vim.fn.fnamemodify(v_path, ":t")
+						table.insert(compilers, {
+							name = "MSVC " .. version .. " (x64)",
+							path = cl_x64,
+							cxx_path = cl_x64,
+							type = "msvc",
+						})
+					end
+
+					local cl_x86 = v_path .. "\\bin\\Hostx86\\x86\\cl.exe"
+					if vim.fn.executable(cl_x86) == 1 then
+						local version = vim.fn.fnamemodify(v_path, ":t")
+						table.insert(compilers, {
+							name = "MSVC " .. version .. " (x86)",
+							path = cl_x86,
+							cxx_path = cl_x86,
+							type = "msvc",
+						})
+					end
+				end
+			end
+		end
+
+		if vim.fn.executable("cl.exe") == 1 then
+			local path = vim.fn.exepath("cl.exe")
+			table.insert(compilers, {
+				name = "MSVC (from PATH)",
+				path = path,
+				cxx_path = path,
+				type = "msvc",
+			})
+		end
+	end
+
+	return compilers
+end
+
+local function scan_generators()
+	local output = vim.fn.system("cmake --help")
+	local generators = {}
+	local start = false
+	for line in output:gmatch("[^\r\n]+") do
+		if line:match("^Generators") then
+			start = true
+		elseif start then
+			local gen = line:match("^%*?%s+([^=]+)%s+=")
+			if gen then
+				gen = gen:gsub("%s+$", "")
+				if not line:lower():match("deprecated") then
+					table.insert(generators, gen)
+				end
+			end
+		end
+	end
+	return generators
+end
+
+local function generate_preset(compiler)
+	local cmake_tools = require("cmake-tools")
+	local config = cmake_tools.get_config()
+	local preset_file = config.cwd .. "/CMakePresets.json"
+
+	local preset_data = {
+		version = 3,
+		configurePresets = {},
+	}
+
+	if vim.fn.filereadable(preset_file) == 1 then
+		local content = table.concat(vim.fn.readfile(preset_file), "\n")
+		preset_data = vim.fn.json_decode(content)
+	end
+
+	if not preset_data.configurePresets then
+		preset_data.configurePresets = {}
+	end
+
+	local preset_name = compiler.name:gsub("%s+", "-"):gsub("[^%w%-]", ""):lower()
+	local preset_entry = {
+		name = preset_name,
+		displayName = compiler.name,
+		generator = selected_generator,
+		binaryDir = "${sourceDir}/build/" .. preset_name,
+		cacheVariables = {
+			CMAKE_C_COMPILER = compiler.path,
+			CMAKE_CXX_COMPILER = compiler.cxx_path,
+		},
+	}
+
+	local found = false
+	for i, p in ipairs(preset_data.configurePresets) do
+		if p.name == preset_name then
+			preset_data.configurePresets[i] = preset_entry
+			found = true
+			break
+		end
+	end
+	if not found then
+		table.insert(preset_data.configurePresets, preset_entry)
+	end
+
+	vim.fn.writefile({ vim.fn.json_encode(preset_data) }, preset_file)
+
+	vim.notify("Preset '" .. compiler.name .. "' generated.", vim.log.levels.INFO)
+end
+
 function M.get_config()
 	local ok, cmake_tools = pcall(require, "cmake-tools")
 	local fetch = function(key)
@@ -255,10 +402,51 @@ function M.get_config()
 					end,
 				},
 				{
+					label = "Select Generator",
+					icon = "󰦨",
+					value = function()
+						return selected_generator
+					end,
+					fn = function()
+						local generators = scan_generators()
+						local items = {}
+						for _, g in ipairs(generators) do
+							table.insert(items, {
+								label = g,
+								fn = function()
+									selected_generator = g
+								end,
+							})
+						end
+						return {
+							title = "Select Generator",
+							desc = "Choose a CMake generator for presets.",
+							items = { items },
+						}
+					end,
+				},
+				{
 					label = "Select Compiler",
 					icon = "󰘦",
-					value = "None",
-					fn = function() end,
+					value = "Auto",
+					fn = function()
+						local compilers = scan_compilers()
+
+						local items = {}
+						for _, c in ipairs(compilers) do
+							table.insert(items, {
+								label = c.name,
+								fn = function()
+									generate_preset(c)
+								end,
+							})
+						end
+						return {
+							title = "Select Compiler",
+							desc = "Select a compiler to generate a new CMakePreset.",
+							items = { items },
+						}
+					end,
 				},
 			},
 		},

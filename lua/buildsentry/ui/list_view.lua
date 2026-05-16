@@ -153,7 +153,7 @@ function ListView:refresh()
 		local virt_text = {
 			{ "    ", "" },
 			{ cursor, selected and "DiagnosticOk" or "Normal" },
-			{ label .. ":", selected and "Bold" or "Normal" },
+			{ label .. "", selected and "Bold" or "Normal" },
 		}
 
 		if value ~= "" then
@@ -244,6 +244,7 @@ function ListView:confirm()
 
 			vim.schedule(function()
 				self:refresh()
+				self.back(self)
 			end)
 		end
 	end
