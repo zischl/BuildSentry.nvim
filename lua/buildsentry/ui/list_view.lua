@@ -1,5 +1,16 @@
 local window_util = require("buildsentry.ui.window")
 
+local function setup_buf_name(buf, name)
+	if not buf or not vim.api.nvim_buf_is_valid(buf) then
+		return
+	end
+	local existing_buf = vim.fn.bufnr(name)
+	if existing_buf ~= -1 and existing_buf ~= buf and vim.api.nvim_buf_is_valid(existing_buf) then
+		pcall(vim.api.nvim_buf_delete, existing_buf, { force = true })
+	end
+	pcall(vim.api.nvim_buf_set_name, buf, name)
+end
+
 local ListView = {}
 ListView.__index = ListView
 
@@ -31,7 +42,8 @@ end
 function ListView:render()
 	if not self.buf or not vim.api.nvim_buf_is_valid(self.buf) then
 		self.buf = vim.api.nvim_create_buf(false, true)
-		vim.api.nvim_buf_set_name(self.buf, self.title)
+		vim.bo[self.buf].bufhidden = "wipe"
+		setup_buf_name(self.buf, self.title)
 	end
 
 	local stats = vim.api.nvim_list_uis()[1]
@@ -267,7 +279,7 @@ function ListView:update(data, stateless)
 	self.keymaps = data.keymaps or {}
 
 	if self.buf and vim.api.nvim_buf_is_valid(self.buf) then
-		vim.api.nvim_buf_set_name(self.buf, self.title)
+		setup_buf_name(self.buf, self.title)
 	end
 
 	self.flat_items = {}
@@ -299,6 +311,12 @@ function ListView:close()
 	if self.win and vim.api.nvim_win_is_valid(self.win) then
 		vim.api.nvim_win_close(self.win, true)
 	end
+
+	if self.buf and vim.api.nvim_buf_is_valid(self.buf) then
+		pcall(vim.api.nvim_buf_delete, self.buf, { force = true })
+	end
+	self.buf = nil
+	self.win = nil
 
 	if self.focus_guard_au then
 		pcall(vim.api.nvim_del_autocmd, self.focus_guard_au)
