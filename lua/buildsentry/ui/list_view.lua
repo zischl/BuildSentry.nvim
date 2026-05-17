@@ -32,7 +32,10 @@ function ListView:new(data)
 	obj.flat_items = {}
 	for _, section in ipairs(obj.sections) do
 		for _, item in ipairs(section) do
-			table.insert(obj.flat_items, item)
+			vim.print(item)
+			if item then
+				table.insert(obj.flat_items, item)
+			end
 		end
 	end
 
@@ -221,7 +224,7 @@ function ListView:setup_keymaps(buf)
 		vim.keymap.set(km.mode or "n", km.key, function()
 			local current_item = self.flat_items[self.current_index]
 			if not km.enabled or km.enabled(current_item) then
-				km.fn(current_item, self.current_index)
+				km.fn(current_item, self.current_index, self)
 			end
 		end, map_opts)
 	end
@@ -285,7 +288,9 @@ function ListView:update(data, stateless)
 	self.flat_items = {}
 	for _, section in ipairs(self.sections) do
 		for _, item in ipairs(section) do
-			table.insert(self.flat_items, item)
+			if item then
+				table.insert(self.flat_items, item)
+			end
 		end
 	end
 
@@ -295,13 +300,27 @@ function ListView:update(data, stateless)
 		self.current_index = 1
 	end
 
+	if self.current_index > #self.flat_items then
+		self.current_index = math.max(1, #self.flat_items)
+	end
+
 	self:render()
 end
 
 function ListView:back()
 	if #self.history > 0 then
 		local prev = table.remove(self.history)
-		self:update(prev, true)
+		if #self.history == 0 and self.data_fn then
+			local fresh_data = self.data_fn()
+			if fresh_data then
+				fresh_data.current_index = prev.current_index
+				self:update(fresh_data, true)
+			else
+				self:update(prev, true)
+			end
+		else
+			self:update(prev, true)
+		end
 	else
 		self:close()
 	end
@@ -331,12 +350,16 @@ end
 
 local M = {}
 
----@param options table|table[]
+---@param options table|table[]|function
 ---@param title? string
 ---@param on_close? function
 function M.open(options, title, on_close)
 	local data = {}
-	if type(options) == "table" and options.items then
+	local data_fn = nil
+	if type(options) == "function" then
+		data_fn = options
+		data = options()
+	elseif type(options) == "table" and options.items then
 		data = options
 	else
 		data = {
@@ -346,6 +369,9 @@ function M.open(options, title, on_close)
 		}
 	end
 	local lv = ListView:new(data)
+	if data_fn then
+		lv.data_fn = data_fn
+	end
 	lv:render()
 	return lv
 end

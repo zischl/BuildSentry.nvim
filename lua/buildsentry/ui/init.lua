@@ -141,7 +141,7 @@ end
 function M.configure()
 	local cmake = require("buildsentry.adapter.cmake")
 	local list_view = require("buildsentry.ui.list_view")
-	list_view.open(cmake.get_config())
+	list_view.open(cmake.get_config)
 end
 
 function M.update_guide()

@@ -1,34 +1,39 @@
 local M = {}
 
-function M.generate_task_name(cmd, args, opts)
-	if opts.title and opts.title ~= "" then
-		return opts.title
+local draft_state = {
+	build_type = nil,
+	config_mode = nil,
+	kit = nil,
+	configure_preset = nil,
+	build_preset = nil,
+	build_directory = nil,
+	generator = nil,
+	compiler = nil,
+	initialized = false,
+}
+
+function M.clear_draft()
+	draft_state.build_type = nil
+	draft_state.kit = nil
+	draft_state.configure_preset = nil
+	draft_state.build_preset = nil
+	draft_state.build_directory = nil
+	draft_state.generator = nil
+	draft_state.compiler = nil
+	draft_state.initialized = false
+end
+
+function M.init_draft()
+	if not draft_state.initialized then
+		draft_state.build_type = nil
+		draft_state.kit = nil
+		draft_state.configure_preset = nil
+		draft_state.build_preset = nil
+		draft_state.build_directory = nil
+		draft_state.generator = nil
+		draft_state.compiler = nil
+		draft_state.initialized = true
 	end
-
-	if args then
-		local target = nil
-		local build = false
-		for i, arg in ipairs(args) do
-			if arg == "--target" and args[i + 1] then
-				target = args[i + 1]
-			elseif arg == "--build" then
-				build = true
-			end
-		end
-
-		if target then
-			return "CMake Build: " .. target
-		elseif build then
-			return "CMake Build"
-		end
-	end
-
-	if cmd:match("cmake$") or cmd:match("cmake.exe$") then
-		return "CMake Configure"
-	end
-
-	local exe_name = vim.fn.fnamemodify(cmd, ":t")
-	return "Run: " .. exe_name
 end
 
 function M.get_adapter()
@@ -60,6 +65,60 @@ function M.get_adapter()
 			return true
 		end,
 	}
+end
+
+function M.attach()
+	local ok_exec, executors = pcall(require, "cmake-tools.executors")
+	local ok_run, runners = pcall(require, "cmake-tools.runners")
+
+	if not (ok_exec and ok_run) then
+		return
+	end
+
+	local adapter = M.get_adapter()
+	executors.buildsentry = adapter
+	runners.buildsentry = adapter
+
+	local ok_const, const = pcall(require, "cmake-tools.const")
+	if ok_const then
+		if const.cmake_executor and const.cmake_executor.default_opts then
+			const.cmake_executor.default_opts.buildsentry = {}
+		end
+		if const.cmake_runner and const.cmake_runner.default_opts then
+			const.cmake_runner.default_opts.buildsentry = {}
+		end
+	end
+end
+
+function M.generate_task_name(cmd, args, opts)
+	if opts.title and opts.title ~= "" then
+		return opts.title
+	end
+
+	if args then
+		local target = nil
+		local build = false
+		for i, arg in ipairs(args) do
+			if arg == "--target" and args[i + 1] then
+				target = args[i + 1]
+			elseif arg == "--build" then
+				build = true
+			end
+		end
+
+		if target then
+			return "CMake Build: " .. target
+		elseif build then
+			return "CMake Build"
+		end
+	end
+
+	if cmd:match("cmake$") or cmd:match("cmake.exe$") then
+		return "CMake Configure"
+	end
+
+	local exe_name = vim.fn.fnamemodify(cmd, ":t")
+	return "Run: " .. exe_name
 end
 
 function M.get_actions()
@@ -142,29 +201,6 @@ function M.get_actions()
 			end,
 		},
 	}
-end
-
-function M.attach()
-	local ok_exec, executors = pcall(require, "cmake-tools.executors")
-	local ok_run, runners = pcall(require, "cmake-tools.runners")
-
-	if not (ok_exec and ok_run) then
-		return
-	end
-
-	local adapter = M.get_adapter()
-	executors.buildsentry = adapter
-	runners.buildsentry = adapter
-
-	local ok_const, const = pcall(require, "cmake-tools.const")
-	if ok_const then
-		if const.cmake_executor and const.cmake_executor.default_opts then
-			const.cmake_executor.default_opts.buildsentry = {}
-		end
-		if const.cmake_runner and const.cmake_runner.default_opts then
-			const.cmake_runner.default_opts.buildsentry = {}
-		end
-	end
 end
 
 local function scan_compilers()
@@ -372,8 +408,13 @@ local function get_active_compiler()
 	return "Auto by CMake"
 end
 
-local function generate_preset(compiler)
-	local cmake_tools = require("cmake-tools")
+local function save_to_preset()
+	local ok, cmake_tools = pcall(require, "cmake-tools")
+	if not ok then
+		vim.notify("cmake-tools.nvim is not loaded.", vim.log.levels.ERROR)
+		return
+	end
+
 	local config = cmake_tools.get_config()
 	local preset_file = config.cwd .. "/CMakePresets.json"
 
@@ -382,58 +423,192 @@ local function generate_preset(compiler)
 		configurePresets = {},
 	}
 
-	if vim.fn.filereadable(preset_file) == 1 then
+	local file_exists = vim.fn.filereadable(preset_file) == 1
+	if file_exists then
 		local content = table.concat(vim.fn.readfile(preset_file), "\n")
-		preset_data = vim.fn.json_decode(content)
+		pcall(function()
+			preset_data = vim.fn.json_decode(content)
+		end)
 	end
 
 	if not preset_data.configurePresets then
 		preset_data.configurePresets = {}
 	end
 
-	local preset_name = compiler.name:gsub("%s+", "-"):gsub("[^%w%-]", ""):lower()
-	local preset_entry = {
-		name = preset_name,
-		displayName = compiler.name,
-		generator = get_active_generator(),
-		binaryDir = "${sourceDir}/build/" .. preset_name,
-		cacheVariables = {
-			CMAKE_C_COMPILER = compiler.path,
-			CMAKE_CXX_COMPILER = compiler.cxx_path,
-		},
-	}
+	local active_preset_name = cmake_tools.get_configure_preset()
+	local target_preset = nil
 
-	local found = false
-	for i, p in ipairs(preset_data.configurePresets) do
-		if p.name == preset_name then
-			preset_data.configurePresets[i] = preset_entry
-			found = true
-			break
+	if active_preset_name then
+		for _, preset in ipairs(preset_data.configurePresets) do
+			if preset.name == type(active_preset_name) == "table" and active_preset_name.name or active_preset_name then
+				target_preset = preset
+				break
+			end
 		end
 	end
-	if not found then
-		table.insert(preset_data.configurePresets, preset_entry)
+
+	if not target_preset then
+		if #preset_data.configurePresets > 0 then
+			target_preset = preset_data.configurePresets[1]
+		else
+			target_preset = {
+				name = active_preset_name,
+				displayName = "BuildSentry Configuration",
+				binaryDir = "${sourceDir}/build/" .. active_preset_name,
+			}
+			table.insert(preset_data.configurePresets, target_preset)
+		end
 	end
 
-	vim.fn.writefile({ vim.fn.json_encode(preset_data) }, preset_file)
+	if draft_state.generator then
+		target_preset.generator = draft_state.generator
+	elseif not target_preset.generator then
+		target_preset.generator = get_active_generator()
+	end
 
-	vim.notify("Preset '" .. compiler.name .. "' generated.", vim.log.levels.INFO)
+	if draft_state.compiler then
+		if not target_preset.cacheVariables then
+			target_preset.cacheVariables = {}
+		end
+		target_preset.cacheVariables.CMAKE_C_COMPILER = draft_state.compiler.path
+		target_preset.cacheVariables.CMAKE_CXX_COMPILER = draft_state.compiler.cxx_path
+	end
+
+	if draft_state.build_type then
+		if not target_preset.cacheVariables then
+			target_preset.cacheVariables = {}
+		end
+		target_preset.cacheVariables.CMAKE_BUILD_TYPE = draft_state.build_type
+		pcall(vim.cmd, "CMakeSelectBuildType " .. draft_state.build_type)
+	end
+
+	local json_ok, json_str = pcall(vim.fn.json_encode, preset_data)
+	if json_ok then
+		vim.fn.writefile({ json_str }, preset_file)
+		if file_exists then
+			vim.notify("Successfully updated Preset in CMakePresets.json!", vim.log.levels.INFO)
+		else
+			vim.notify("Successfully generated CMakePresets.json!", vim.log.levels.INFO)
+		end
+		M.clear_draft()
+	else
+		vim.notify("Failed to encode CMakePresets.json", vim.log.levels.ERROR)
+	end
+end
+
+local function save_to_kit()
+	local ok, cmake_tools = pcall(require, "cmake-tools")
+	if not ok then
+		vim.notify("cmake-tools.nvim is not loaded.", vim.log.levels.ERROR)
+		return
+	end
+
+	local config = cmake_tools.get_config()
+	local kit_file = config.cwd .. "/CMakeKits.json"
+	if vim.fn.filereadable(config.cwd .. "/cmake-kits.json") == 1 then
+		kit_file = config.cwd .. "/cmake-kits.json"
+	end
+
+	local kits_data = {}
+	local file_exists = vim.fn.filereadable(kit_file) == 1
+	if file_exists then
+		local content = table.concat(vim.fn.readfile(kit_file), "\n")
+		pcall(function()
+			kits_data = vim.fn.json_decode(content)
+		end)
+	end
+
+	if type(kits_data) ~= "table" then
+		kits_data = {}
+	end
+
+	local active_kit_name = cmake_tools.get_kit()
+	local target_kit = nil
+
+	if active_kit_name then
+		for _, kit in ipairs(kits_data) do
+			if kit.name == type(active_kit_name) == "table" and active_kit_name.name or active_kit_name then
+				target_kit = kit
+				break
+			end
+		end
+	end
+
+	if not target_kit then
+		if #kits_data > 0 then
+			target_kit = kits_data[1]
+		else
+			target_kit = {
+				name = "BuildSentry Kit",
+			}
+			table.insert(kits_data, target_kit)
+		end
+	end
+
+	if draft_state.generator then
+		target_kit.generator = draft_state.generator
+		config.generator = draft_state.generator
+	elseif not target_kit.generator then
+		target_kit.generator = get_active_generator()
+	end
+
+	if draft_state.compiler then
+		if not target_kit.compilers then
+			target_kit.compilers = {}
+		end
+		target_kit.compilers.C = draft_state.compiler.path
+		target_kit.compilers.CXX = draft_state.compiler.cxx_path
+		target_kit.name = draft_state.compiler.name
+	end
+
+	if draft_state.build_type then
+		pcall(vim.cmd, "CMakeSelectBuildType " .. draft_state.build_type)
+	end
+
+	local json_ok, json_str = pcall(vim.fn.json_encode, kits_data)
+	if json_ok then
+		vim.fn.writefile({ json_str }, kit_file)
+		if file_exists then
+			vim.notify("Successfully updated Kit in " .. vim.fn.fnamemodify(kit_file, ":t") .. "!", vim.log.levels.INFO)
+		else
+			vim.notify("Successfully generated CMakeKits.json!", vim.log.levels.INFO)
+		end
+		M.clear_draft()
+	else
+		vim.notify("Failed to encode kits data", vim.log.levels.ERROR)
+	end
 end
 
 function M.get_config()
+	M.init_draft()
 	local ok, cmake_tools = pcall(require, "cmake-tools")
+
 	local fetch = function(key)
 		if not ok then
-			return "Unknown"
+			return "err: cmake_tools required"
 		end
 		local config = cmake_tools.get_config()
 		return config[key] or "None"
 	end
 
-	local function set_build_type(t)
-		vim.cmd("CMakeSelectBuildType " .. t)
-		return M.get_config()
+	local preset_status = false
+	local kit_status = false
+
+	if ok then
+		local config = cmake_tools.get_config()
+		local preset_file = config.cwd .. "/CMakePresets.json"
+		preset_status = vim.fn.filereadable(preset_file) == 1
+		local kit_file = config.cwd .. "/CMakeKits.json"
+		if vim.fn.filereadable(config.cwd .. "/cmake-kits.json") == 1 then
+			kit_file = config.cwd .. "/cmake-kits.json"
+		end
+		kit_status = vim.fn.filereadable(kit_file) == 1
 	end
+
+	draft_state.config_mode = draft_state.config_mode
+		or preset_status and "Preset Mode"
+		or kit_status and "Kit Mode"
+		or "None"
 
 	return {
 		title = "CMake Configuration",
@@ -444,6 +619,9 @@ function M.get_config()
 					label = "Build Type",
 					icon = "󰙨",
 					value = function()
+						if draft_state.build_type then
+							return draft_state.build_type .. " *"
+						end
 						return fetch("build_type")
 					end,
 					fn = function()
@@ -454,19 +632,27 @@ function M.get_config()
 								{
 									{
 										label = "Debug",
-										fn = function() end,
+										fn = function()
+											draft_state.build_type = "Debug"
+										end,
 									},
 									{
 										label = "Release",
-										fn = function() end,
+										fn = function()
+											draft_state.build_type = "Release"
+										end,
 									},
 									{
 										label = "RelWithDebInfo",
-										fn = function() end,
+										fn = function()
+											draft_state.build_type = "RelWithDebInfo"
+										end,
 									},
 									{
 										label = "MinSizeRel",
-										fn = function() end,
+										fn = function()
+											draft_state.build_type = "MinSizeRel"
+										end,
 									},
 								},
 							},
@@ -474,34 +660,82 @@ function M.get_config()
 					end,
 				},
 				{
-					label = "Select Kit",
+					label = "Configuration",
 					icon = "󰘦",
 					value = function()
-						return fetch("kit")
+						return draft_state.config_mode
+							or preset_status and "Preset Mode"
+							or kit_status and "Kit Mode"
+							or "None"
 					end,
-					fn = function() end,
+					fn = function()
+						return {
+							title = "Select Configuration Mode",
+							desc = "Choose a CMake configuration mode.",
+							items = {
+								{
+									{
+										label = "Preset Mode",
+										fn = function()
+											draft_state.config_mode = "Preset Mode"
+										end,
+									},
+									{
+										label = "Kit Mode",
+										fn = function()
+											draft_state.config_mode = "Kit Mode"
+										end,
+									},
+									{
+										label = "None",
+										fn = function()
+											draft_state.config_mode = "None"
+										end,
+									},
+								},
+							},
+						}
+					end,
 				},
-				{
+
+				draft_state.config_mode == "Preset Mode" and {
 					label = "Config Preset",
 					icon = "󰒓",
 					value = function()
-						return fetch("configure_preset")
+						return draft_state.configure_preset or fetch("configure_preset") or "None"
 					end,
-					fn = function() end,
+					fn = function()
+						vim.cmd("CMakeSelectConfigurePreset")
+					end,
 				},
-				{
+
+				draft_state.config_mode == "Preset Mode" and {
 					label = "Build Preset",
 					icon = "󰒓",
 					value = function()
-						return fetch("build_preset")
+						return draft_state.build_preset or fetch("build_preset") or "None"
 					end,
-					fn = function() end,
+					fn = function()
+						vim.cmd("CMakeSelectBuildPreset")
+					end,
 				},
+
+				draft_state.config_mode == "Kit Mode" and {
+					label = "Select Kit",
+					icon = "󰒓",
+					value = function()
+						return draft_state.kit or fetch("kit") or "None"
+					end,
+					fn = function()
+						vim.cmd("CMakeSelectKit")
+					end,
+				},
+
 				{
 					label = "Build Directory",
 					icon = "󰉖",
 					value = function()
-						return fetch("build_directory")
+						return draft_state.build_directory or fetch("build_directory")
 					end,
 					fn = function()
 						vim.cmd("CMakeSelectBuildDir")
@@ -511,6 +745,9 @@ function M.get_config()
 					label = "Select Generator",
 					icon = "󰦨",
 					value = function()
+						if draft_state.generator then
+							return draft_state.generator .. " *"
+						end
 						return get_active_generator()
 					end,
 					fn = function()
@@ -520,10 +757,7 @@ function M.get_config()
 							table.insert(items, {
 								label = g,
 								fn = function()
-									if ok then
-										local config = cmake_tools.get_config()
-										config.generator = g
-									end
+									draft_state.generator = g
 								end,
 							})
 						end
@@ -538,6 +772,9 @@ function M.get_config()
 					label = "Select Compiler",
 					icon = "󰘦",
 					value = function()
+						if draft_state.compiler then
+							return draft_state.compiler.name .. " *"
+						end
 						return get_active_compiler()
 					end,
 					fn = function()
@@ -548,13 +785,13 @@ function M.get_config()
 							table.insert(items, {
 								label = c.name,
 								fn = function()
-									generate_preset(c)
+									draft_state.compiler = c
 								end,
 							})
 						end
 						return {
 							title = "Select Compiler",
-							desc = "Select a compiler to generate a new CMakePreset.",
+							desc = "Select a compiler for your configuration.",
 							items = { items },
 						}
 					end,
@@ -563,11 +800,43 @@ function M.get_config()
 		},
 		keymaps = {
 			{
-				key = "s",
-				label = "Save",
-				fn = function() end,
+				key = "p",
+				label = preset_status and "Save to Preset" or "Generate Preset",
+				fn = function(item, index, lv)
+					save_to_preset()
+					if lv and lv.data_fn then
+						vim.schedule(function()
+							lv:update(lv.data_fn(), true)
+						end)
+					else
+						vim.schedule(function()
+							pcall(vim.api.nvim_win_close, 0, true)
+							require("buildsentry.ui").configure()
+						end)
+					end
+				end,
+			},
+			{
+				key = "k",
+				label = kit_status and "Save to Kit" or "Generate Kit",
+				fn = function(item, index, lv)
+					save_to_kit()
+					if lv and lv.data_fn then
+						vim.schedule(function()
+							lv:update(lv.data_fn(), true)
+						end)
+					else
+						vim.schedule(function()
+							pcall(vim.api.nvim_win_close, 0, true)
+							require("buildsentry.ui").configure()
+						end)
+					end
+				end,
 			},
 		},
+		on_close = function()
+			M.clear_draft()
+		end,
 	}
 end
 
