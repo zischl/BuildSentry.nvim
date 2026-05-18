@@ -408,6 +408,42 @@ local function get_active_compiler()
 	return "Auto by CMake"
 end
 
+local function preset_healthcheck(name, preset_type)
+	if not name or name == "" then
+		return false
+	end
+	local ok, cmake_tools = pcall(require, "cmake-tools")
+	if not ok then
+		return false
+	end
+	local config = cmake_tools.get_config()
+	local preset_file = config.cwd .. "/CMakePresets.json"
+	local user_preset_file = config.cwd .. "/CMakeUserPresets.json"
+
+	local check_file = function(file)
+		if vim.fn.filereadable(file) == 1 then
+			local content = table.concat(vim.fn.readfile(file), "\n")
+			local data = nil
+			pcall(function()
+				data = vim.fn.json_decode(content)
+			end)
+			if data then
+				local list = data[preset_type or "configurePresets"]
+				if list then
+					for _, p in ipairs(list) do
+						if p.name == name then
+							return true
+						end
+					end
+				end
+			end
+		end
+		return false
+	end
+
+	return check_file(preset_file) or check_file(user_preset_file)
+end
+
 local function save_to_preset()
 	local ok, cmake_tools = pcall(require, "cmake-tools")
 	if not ok then
@@ -435,12 +471,16 @@ local function save_to_preset()
 		preset_data.configurePresets = {}
 	end
 
-	local active_preset_name = cmake_tools.get_configure_preset()
+	local active_preset = cmake_tools.get_configure_preset()
+	local active_preset_name = type(active_preset) == "table" and active_preset.name or active_preset
+	if not preset_healthcheck(active_preset_name, "configurePresets") then
+		active_preset_name = nil
+	end
 	local target_preset = nil
 
 	if active_preset_name then
 		for _, preset in ipairs(preset_data.configurePresets) do
-			if preset.name == type(active_preset_name) == "table" and active_preset_name.name or active_preset_name then
+			if preset.name == active_preset_name then
 				target_preset = preset
 				break
 			end
@@ -448,13 +488,20 @@ local function save_to_preset()
 	end
 
 	if not target_preset then
-		if #preset_data.configurePresets > 0 then
+		if active_preset_name and active_preset_name ~= "" then
+			target_preset = {
+				name = active_preset_name,
+				displayName = active_preset_name .. " (BuildSentry)",
+				binaryDir = "${sourceDir}/build/" .. active_preset_name,
+			}
+			table.insert(preset_data.configurePresets, target_preset)
+		elseif #preset_data.configurePresets > 0 then
 			target_preset = preset_data.configurePresets[1]
 		else
 			target_preset = {
-				name = active_preset_name,
-				displayName = "BuildSentry Configuration",
-				binaryDir = "${sourceDir}/build/" .. active_preset_name,
+				name = "default",
+				displayName = "Default (BuildSentry)",
+				binaryDir = "${sourceDir}/build/default",
 			}
 			table.insert(preset_data.configurePresets, target_preset)
 		end
@@ -462,6 +509,7 @@ local function save_to_preset()
 
 	if draft_state.generator then
 		target_preset.generator = draft_state.generator
+		config.generator = draft_state.generator
 	elseif not target_preset.generator then
 		target_preset.generator = get_active_generator()
 	end
@@ -479,8 +527,34 @@ local function save_to_preset()
 			target_preset.cacheVariables = {}
 		end
 		target_preset.cacheVariables.CMAKE_BUILD_TYPE = draft_state.build_type
+		config.build_type = draft_state.build_type
 		pcall(vim.cmd, "CMakeSelectBuildType " .. draft_state.build_type)
 	end
+
+	if draft_state.build_directory then
+		target_preset.binaryDir = draft_state.build_directory
+		config.build_directory = draft_state.build_directory
+	end
+
+	if active_preset and type(active_preset) == "table" then
+		if draft_state.generator then
+			active_preset.generator = draft_state.generator
+		end
+		if draft_state.compiler then
+			active_preset.cacheVariables = active_preset.cacheVariables or {}
+			active_preset.cacheVariables.CMAKE_C_COMPILER = draft_state.compiler.path
+			active_preset.cacheVariables.CMAKE_CXX_COMPILER = draft_state.compiler.cxx_path
+		end
+		if draft_state.build_type then
+			active_preset.cacheVariables = active_preset.cacheVariables or {}
+			active_preset.cacheVariables.CMAKE_BUILD_TYPE = draft_state.build_type
+		end
+		if draft_state.build_directory then
+			active_preset.binaryDir = draft_state.build_directory
+		end
+	end
+
+	config.use_preset = true
 
 	local json_ok, json_str = pcall(vim.fn.json_encode, preset_data)
 	if json_ok then
@@ -522,12 +596,12 @@ local function save_to_kit()
 		kits_data = {}
 	end
 
-	local active_kit_name = cmake_tools.get_kit()
+	local active_kit = cmake_tools.get_kit()
 	local target_kit = nil
 
-	if active_kit_name then
+	if active_kit then
 		for _, kit in ipairs(kits_data) do
-			if kit.name == type(active_kit_name) == "table" and active_kit_name.name or active_kit_name then
+			if kit.name == active_kit.name then
 				target_kit = kit
 				break
 			end
@@ -535,7 +609,13 @@ local function save_to_kit()
 	end
 
 	if not target_kit then
-		if #kits_data > 0 then
+		local active_kit_name = active_kit and active_kit.name
+		if active_kit_name and active_kit_name ~= "" then
+			target_kit = {
+				name = active_kit_name,
+			}
+			table.insert(kits_data, target_kit)
+		elseif #kits_data > 0 then
 			target_kit = kits_data[1]
 		else
 			target_kit = {
@@ -562,8 +642,27 @@ local function save_to_kit()
 	end
 
 	if draft_state.build_type then
+		config.build_type = draft_state.build_type
 		pcall(vim.cmd, "CMakeSelectBuildType " .. draft_state.build_type)
 	end
+
+	if draft_state.build_directory then
+		config.build_directory = draft_state.build_directory
+	end
+
+	if active_kit and type(active_kit) == "table" then
+		if draft_state.generator then
+			active_kit.generator = draft_state.generator
+		end
+		if draft_state.compiler then
+			active_kit.name = draft_state.compiler.name
+			active_kit.compilers = active_kit.compilers or {}
+			active_kit.compilers.C = draft_state.compiler.path
+			active_kit.compilers.CXX = draft_state.compiler.cxx_path
+		end
+	end
+
+	config.use_preset = false
 
 	local json_ok, json_str = pcall(vim.fn.json_encode, kits_data)
 	if json_ok then
@@ -585,10 +684,33 @@ function M.get_config()
 
 	local fetch = function(key)
 		if not ok then
-			return "err: cmake_tools required"
+			return "None"
 		end
-		local config = cmake_tools.get_config()
-		return config[key] or "None"
+		if key == "configure_preset" then
+			local preset = cmake_tools.get_configure_preset()
+			local name = type(preset) == "table" and preset.name or preset
+			if preset_healthcheck(name, "configurePresets") then
+				return name
+			end
+			return "None"
+		elseif key == "build_preset" then
+			local preset = cmake_tools.get_build_preset()
+			local name = type(preset) == "table" and preset.name or preset
+			if preset_healthcheck(name, "buildPresets") then
+				return name
+			end
+			return "None"
+		elseif key == "kit" then
+			local kit = cmake_tools.get_kit()
+			return type(kit) == "table" and kit.name or kit or "None"
+		elseif key == "build_type" then
+			local config = cmake_tools.get_config()
+			return config.build_type or "None"
+		elseif key == "build_directory" then
+			local config = cmake_tools.get_config()
+			return config.build_directory or "None"
+		end
+		return "None"
 	end
 
 	local preset_status = false
@@ -799,7 +921,7 @@ function M.get_config()
 			},
 		},
 		keymaps = {
-			{
+			(draft_state.config_mode == "Preset Mode" or draft_state.config_mode == "None") and {
 				key = "p",
 				label = preset_status and "Save to Preset" or "Generate Preset",
 				fn = function(item, index, lv)
@@ -816,7 +938,7 @@ function M.get_config()
 					end
 				end,
 			},
-			{
+			(draft_state.config_mode == "Kit Mode" or draft_state.config_mode == "None") and {
 				key = "k",
 				label = kit_status and "Save to Kit" or "Generate Kit",
 				fn = function(item, index, lv)

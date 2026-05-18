@@ -105,7 +105,7 @@ function ListView:render()
 		table.insert(footer_items, "[BS/h] Back")
 	end
 	for _, km in ipairs(self.keymaps) do
-		if km.desc or km.label then
+		if km and km.key then
 			table.insert(footer_items, string.format("[%s] %s", km.key, km.desc or km.label))
 		end
 	end
@@ -221,6 +221,9 @@ function ListView:setup_keymaps(buf)
 	end, map_opts)
 
 	for _, km in ipairs(self.keymaps) do
+		if not km then
+			return
+		end
 		vim.keymap.set(km.mode or "n", km.key, function()
 			local current_item = self.flat_items[self.current_index]
 			if not km.enabled or km.enabled(current_item) then
