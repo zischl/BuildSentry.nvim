@@ -58,6 +58,7 @@ function M.home()
 
 	local dashboard_items = {
 		{ icon = "󰘳", desc = "Actions", key = "a" },
+		{ icon = "󰒓", desc = "Configure", key = "p" },
 		{ icon = "󰗼", desc = "Quit", key = "q" },
 	}
 
@@ -135,6 +136,12 @@ function M.reset()
 	vim.api.nvim_buf_add_highlight(buf_task, task_list.ns, "Comment", mid_point, 0, -1)
 
 	M.home()
+end
+
+function M.configure()
+	local cmake = require("buildsentry.adapter.cmake")
+	local list_view = require("buildsentry.ui.list_view")
+	list_view.open(cmake.get_config)
 end
 
 function M.update_guide()

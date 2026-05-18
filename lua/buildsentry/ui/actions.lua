@@ -30,7 +30,6 @@ M.global = {
 		desc = "Home",
 		mode = "n",
 		enabled = function()
-			local state = require("buildsentry.state")
 			if not state.windows.output or not vim.api.nvim_win_is_valid(state.windows.output) then
 				return false
 			end
@@ -60,6 +59,15 @@ M.global = {
 					choice.fn()
 				end
 			end)
+		end,
+	},
+	{
+		key = "p",
+		icon = "󰒓",
+		desc = "Configure",
+		mode = "n",
+		fn = function()
+			require("buildsentry.ui").configure()
 		end,
 	},
 }
@@ -127,11 +135,10 @@ M.task_list = {
 		desc = "Clear",
 		mode = "n",
 		fn = function()
-			local state = require("buildsentry.state")
 			local task_list = require("buildsentry.ui.task_list")
 			for i = #state.tasks, 1, -1 do
 				local t = state.tasks[i]
-				if t:is_alive() then
+				if not t:is_alive() then
 					task_list.remove(t)
 				end
 			end
